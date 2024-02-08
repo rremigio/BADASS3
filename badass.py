@@ -2818,6 +2818,14 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         temp_dir  = data_dir.joinpath("eMILES")
         fwhm_temp = 2.51 # eMILES spectra have a constant resolution FWHM of 2.51A (linear)
         disp_temp = fwhm_temp/2.3548
+    if (losvd_options["library"]=="M11z002"):
+        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z002/"
+        fwhm_temp = 0.550
+        disp_temp = fwhm_temp/2.3548 
+    if (losvd_options["library"]=="M11z004"):
+        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z004/"
+        fwhm_temp = 0.550
+        disp_temp = fwhm_temp/2.3548 
 
     fit_min,fit_max = float(fit_reg[0]),float(fit_reg[1])
     #
