@@ -2830,11 +2830,11 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         fwhm_temp = 2.51 # eMILES spectra have a constant resolution FWHM of 2.51A (linear)
         disp_temp = fwhm_temp/2.3548
     if (losvd_options["library"]=="M11z002"):
-        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp/z002")
+        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z002/"
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
     if (losvd_options["library"]=="M11z004"):
-        temp_dir  = datadir.joinpath("M11_ELODIE_ssp/z004")
+        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z004/"
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
 
@@ -3013,13 +3013,13 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
         if losvd_options["vel_const"]["bool"]==False:
             #
             par_input['STEL_VEL'] = ({'init':100. ,
-                                         'plim':(-300.,300.),
+                                         'plim':(-500.,500.),
                                         })
         # Stellar velocity dispersion
         if losvd_options["disp_const"]["bool"]==False:
             #
             par_input['STEL_DISP'] = ({'init':150.0,
-                                           'plim':(0.001,300.),
+                                           'plim':(0.001,500.),
                                          })
 
     ##############################################################################
@@ -3054,7 +3054,7 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
                                       })
         # AGN simple power-law slope
         par_input['POWER_SLOPE'] = ({'init':-1.0  ,
-                                        'plim':(-3.0,0.0),
+                                        'plim':(-6.0,6.0),
                                         })
         
     #### Smoothly-Broken Power-Law (AGN continuum) ###############################
