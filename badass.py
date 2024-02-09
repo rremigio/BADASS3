@@ -10179,9 +10179,12 @@ def simple_power_law(x,amp,alpha):
             AGN continuum model the same length as x
     """
     # This works
-    xb = np.max(x)-(0.5*(np.max(x)-np.min(x))) # take to be half of the wavelength range
-    C = amp*(x/xb)**alpha # un-normalized
-    return C
+    #### xb = np.max(x)-(0.5*(np.max(x)-np.min(x))) # take to be half of the wavelength range
+    #### C = amp*(x/xb)**alpha # un-normalized
+
+    # RR - since I am working with nearby seyferts, set the pivot wavelength to 5100 A 
+    C = amp * (x/5100)**alpha
+    return 
 
 ##################################################################################
 
