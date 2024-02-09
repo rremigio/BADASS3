@@ -3013,13 +3013,13 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
         if losvd_options["vel_const"]["bool"]==False:
             #
             par_input['STEL_VEL'] = ({'init':100. ,
-                                         'plim':(-500.,500.),
+                                         'plim':(-300.,300.),
                                         })
         # Stellar velocity dispersion
         if losvd_options["disp_const"]["bool"]==False:
             #
             par_input['STEL_DISP'] = ({'init':150.0,
-                                           'plim':(0.001,500.),
+                                           'plim':(0.001,300.),
                                          })
 
     ##############################################################################
@@ -3054,7 +3054,7 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
                                       })
         # AGN simple power-law slope
         par_input['POWER_SLOPE'] = ({'init':-1.0  ,
-                                        'plim':(-6.0,6.0),
+                                        'plim':(-3.0,0.0),
                                         })
         
     #### Smoothly-Broken Power-Law (AGN continuum) ###############################

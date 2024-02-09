@@ -1058,7 +1058,6 @@ def check_losvd_options(input,verbose=False):
 				"default": True,
 				"error_message": "\n .vel_const bool must be True or False.\n",},
 	"val" : 	{"conds":[	lambda x: isinstance(x,(int,float)),
-							lambda x: x>=0
 								],
 				"default": 0.0,
 				"error_message": "\n vel_const val must be an integer or float.\n",},
