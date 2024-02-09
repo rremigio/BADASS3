@@ -1484,6 +1484,94 @@ def check_opt_feii_options(input,verbose=False):
 		output["opt_temp_const"] = check_dict(output["opt_temp_const"],opt_temp_const_dict)
 
 		return output
+	
+	if input["opt_template"]["type"]=="P22":  # manually add Daesong Park's Mrk 493 STIS template
+		# If feii_options not specified
+		if not input:
+			output={
+				"opt_template"  :{"type":"P22"}, 
+				"opt_amp_const" :{"bool":False,"opt_feii_val":1.0},
+				"opt_disp_const":{"bool":True ,"opt_feii_val":3000.0},
+				"opt_voff_const":{"bool":True ,"opt_feii_val":0.0},
+					}
+			return output
+		
+		# for dictionaries within dictionaries, we check the outer-most level first to ensure
+		# they are correct dictionaries.
+		keyword_dict={
+		"opt_template" : {"conds":[
+									lambda x: isinstance(x,(dict))
+									],
+			  				"default": {"type":"P22"},
+			  				"error_message": "\n opt_template must be a dictionary.\n"},
+		"opt_amp_const" : {"conds":[
+									lambda x: isinstance(x,(dict))
+									],
+			  				"default": {"bool":False,"opt_feii_val":1.0},
+			  				"error_message": "\n opt_amp_const must be a dictionary.\n"},
+		"opt_disp_const" : {"conds":[
+									lambda x: isinstance(x,(dict))
+									],
+			  				"default": {"bool":True ,"opt_feii_val":3000.0},
+			  				"error_message": "\n opt_disp_const must be a dictionary.\n"},
+		"opt_voff_const" : {"conds":[
+									lambda x: isinstance(x,(dict))
+									],
+			  				"default": {"bool":True ,"opt_feii_val":0.0},
+			  				"error_message": "\n opt_voff_const must be a dictionary.\n"}
+		}
+		output = check_dict(input,keyword_dict)
+		# now we check to ensure the inner dictionaries are correct.  We do this by defining a sub-keyword dictionary for each 
+		# main keyword. 
+		#
+		# opt_template
+		opt_template_dict = {
+		"type" : {"conds":[	lambda x: isinstance(x,(str)),
+							lambda x: x in ["VC04","K10", "P22"]],
+					"default": "P22",
+					"error_message": "\n Optical FeII template type (opt_template type) must be a string and either 'VC04', 'K10', or 'P22'.\n",}
+			}
+		output["opt_template"] = check_dict(output["opt_template"],opt_template_dict)
+		# opt_amp_const
+		opt_amp_const_dict = {
+		"bool" : {"conds":[	lambda x: isinstance(x,(bool))],
+					"default": False,
+					"error_message": "\n opt_amp_const bool must be True or False.\n",},
+		
+		"opt_feii_val" : {"conds":[	lambda x: isinstance(x,(int,float)),
+										lambda x: x>0
+									],
+					"default": 1.0,
+					"error_message": "\n opt_amp_const opt_feii_val must be an integer or float.\n",}
+			}
+		output["opt_amp_const"] = check_dict(output["opt_amp_const"],opt_amp_const_dict)
+
+		# opt_fwhm_const
+		opt_disp_const_dict = {
+		"bool" : {"conds":[	lambda x: isinstance(x,(bool))],
+					"default": True,
+					"error_message": "\n opt_disp_const bool must be True or False.\n",},
+		"opt_feii_val" : {"conds":[	lambda x: isinstance(x,(int,float)),
+										lambda x: x>0
+									],
+					"default": 3000.0,
+					"error_message": "\n opt_disp_const opt_feii_val must be an integer or float.\n",}
+			}
+		output["opt_disp_const"] = check_dict(output["opt_disp_const"],opt_disp_const_dict)
+
+
+		# opt_voff_const
+		opt_voff_const_dict = {
+		"bool" : {"conds":[	lambda x: isinstance(x,(bool))],
+					"default": True,
+					"error_message": "\n opt_voff_const bool must be True or False.\n",},
+		"opt_feii_val" : {"conds":[	lambda x: isinstance(x,(int,float))],
+					"default": 0.0,
+					"error_message": "\n opt_voff_const opt_feii_val must be an integer or float.\n",}
+			}
+		output["opt_voff_const"] = check_dict(output["opt_voff_const"],opt_voff_const_dict)
+		
+		return output	
 
 
 

@@ -723,6 +723,17 @@ def run_single_thread(fits_file,
         comp_options["fit_opt_feii"]=False
         opt_feii_templates = None
         write_log((),'update_opt_feii',run_dir)
+	# Park et al. (2022) - Mrk493 STIS FeII template by Daesong Park; added by Raymond Remigio
+    if (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="P22") & (lam_gal[-1]>=4000.0) & (lam_gal[0]<=5600.0):
+        opt_feii_templates = initialize_opt_feii(lam_gal,opt_feii_options,disp_res,fit_mask,velscale)
+    elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="P22") & ((lam_gal[-1]<4000.0) | (lam_gal[0]>5600.0)):
+        if verbose:
+            print('\n - Optical FeII template disabled because template is outside of fitting region.')
+        fit_opt_feii = False
+        comp_options["fit_opt_feii"]=False
+        opt_feii_templates = None
+        write_log((),'update_opt_feii',run_dir)	
+
     elif (fit_opt_feii==False):
         opt_feii_templates = None
         
@@ -3150,6 +3161,32 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
             par_input['OPT_FEII_TEMP'] = ({'init'  :10000.0,
                                            'plim'  :(2000.0,25000.0),
                                            })
+
+    elif (fit_opt_feii==True) & (opt_feii_options['opt_template']['type']=='P22'):
+        if verbose:
+            print('	 - Fitting optical Mrk493 STIS FeII template from Park et al. (2022)')
+
+		# Park et al. 2022 3-parameter FeII template for AGN
+		# Consits of 3 free parameters
+		#	- Amplitude/Normalization 
+		#	- FWHM
+		#	- Velocity offset
+
+		# FeII amplitude
+        if (opt_feii_options['opt_amp_const']['bool']==False):
+            par_input['OPT_FEII_AMP'] = ({'init'  :0.1*median_flux,
+                                        'plim'  :(0, max_flux),
+							   			})
+        if (opt_feii_options['opt_disp_const']['bool']==False):
+			# FeII DISP
+            par_input['OPT_FEII_DISP'] = ({'init'  :250.0,
+			                            'plim'  :(100,10000.0),
+							   		   })
+        if (opt_feii_options['opt_voff_const']['bool']==False):
+			# Narrow FeII offset
+            par_input['OPT_FEII_VOFF'] = ({'init'  :0.0,
+                                        'plim'  :(-1000.0,1000.0),
+							   		   })
 
     ##############################################################################
 
@@ -6201,6 +6238,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+        elif (key=='OPT_FEII_TEMPLATE'): # for newly added P22 template
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -6306,6 +6346,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+
+        elif (key=='OPT_FEII_TEMPLATE'): # for newly added P22 template
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
@@ -6473,6 +6516,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+        elif (key=='OPT_FEII_TEMPLATE'): # for newly added P22 template
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -6577,6 +6623,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+
+        elif (key=='OPT_FEII_TEMPLATE'): # for newly added P22 template
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
@@ -7933,6 +7982,9 @@ def max_like_plot(lam_gal,comp_dict,line_list,params,param_names,fit_mask,fit_no
                 ax1.plot(comp_dict['WAVE'], comp_dict['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
                 ax1.plot(comp_dict['WAVE'], comp_dict['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+            elif (key=='OPT_FEII_TEMPLATE'): # for newly added P22 template
+                ax1.plot(comp_dict['WAVE'], comp_dict['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
             elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
                 if key=='F_OPT_FEII_TEMPLATE':
                     ax1.plot(comp_dict['WAVE'], comp_dict['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -8853,6 +8905,13 @@ def fit_model(params,
             comp_dict['G_OPT_FEII_TEMPLATE'] = g_template
             comp_dict['Z_OPT_FEII_TEMPLATE'] = z_template
 
+        elif (opt_feii_options['opt_template']['type']=='P22'):
+            
+            p22_opt_feii_template = P22_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale)
+			
+            host_model = (host_model) - (p22_opt_feii_template)
+            comp_dict['OPT_FEII_TEMPLATE'] = p22_opt_feii_template
+
     ########################################################################################################
 
 
@@ -9327,7 +9386,7 @@ def generate_host_template(lam_gal,host_options,disp_res,fit_mask,velscale,verbo
 ##################################################################################
 
 
-#### Optical FeII Templates ##############################################################
+#### Optical FeII Templates ######################################################
 
 def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale):
     """
@@ -9347,6 +9406,9 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
              total of 7 free parameters.  This template is only recommended 
              for objects with very strong FeII emission, for which the LOSVD
              cannot be determined at all.
+
+	'P22'	: Park et al. (2022) template, derived from HST STIS observations
+			  of NLS1 Mrk 493, which may be superior to I Zw 1 for use as a template.
              """
     if (opt_feii_options['opt_template']['type']=='VC04'):
         # Load the data into Pandas DataFrames
@@ -9413,6 +9475,50 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
             # plt.tight_layout()
             #
             opt_feii_templates = (br_conv_temp, na_conv_temp)
+
+    elif (opt_feii_options['opt_template']['type']=='P22'):
+		# open daesong's iron template
+        p22_temp = np.genfromtxt('badass_data_files/feii_templates/park_2022/tab1.txt')
+        p22_wav  = p22_temp[:, 0]
+        p22_flux = p22_temp[:, 1]/np.max(p22_temp[:, 1]) # NORMALIZE, even though the maximum is already at 0.7 ish
+
+		# Generate a new grid with the original resolution, but the size of the fitting region
+        dlam_feii = p22_wav[1] - p22_wav[0] # angstroms
+        npad = 100 # angstroms
+        lam_feii	 = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad,dlam_feii) # angstroms
+		# Interpolate the original template onto the new grid
+        interp_ftn_p22 = interp1d(p22_wav, p22_flux,kind='linear',bounds_error=False,fill_value=(0.0,0.0))
+        spec_feii_p22 = interp_ftn_p22(lam_feii)
+		# Convolve templates to the native resolution of input spectra
+        fwhm_feii = 4 * 2.73 # rough estimate of LSF in pixels for STIS L-modes for an extended source using the 52X0.2 slit, multiplied by avg dispersion of G430L
+        disp_feii = fwhm_feii / 2.3548
+        disp_res_interp = np.interp(lam_feii, lam_gal, disp_res)
+        disp_diff = np.sqrt((disp_res_interp**2 - disp_feii**2).clip(0))
+        sigma = disp_diff/dlam_feii # Sigma difference in pixels
+        spec_feii_p22 = gaussian_filter1d(spec_feii_p22, sigma)
+		# log-rebin the spectrum to same velocity scale as the input galaxy
+        lamRange_feii = [np.min(lam_feii), np.max(lam_feii)]
+        spec_feii_p22_new, loglam_feii, velscale_feii = log_rebin(lamRange_feii, spec_feii_p22, velscale=velscale)#[0]
+
+		# Pre-compute FFT of templates, since they do not change (only the LOSVD and convolution changes)
+        p22_opt_feii_fft, npad = template_rfft(spec_feii_p22_new)
+		# The FeII templates are offset from the input galaxy spectrum by 100 A, so we 
+		# shift the spectrum to match that of the input galaxy
+        c = 299792.458 # speed of light in km/s
+        vsyst = np.log(lam_feii[0]/lam_gal[0])*c
+
+		# If opt_fwhm_const=True AND opt_voff_const=True, we preconvolve the templates so we don't have to 
+		# during the fit
+        if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+            p22_disp = opt_feii_options["opt_disp_const"]["opt_feii_val"]
+			#
+            p22_voff = opt_feii_options["opt_voff_const"]["opt_feii_val"]
+			#
+            p22_conv_temp = convolve_gauss_hermite(p22_opt_feii_fft, npad, float(velscale),\
+									 	 [p22_voff, p22_disp], lam_gal.shape[0], 
+									  	 velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+
+            opt_feii_templates = (p22_conv_temp)
 
         elif (opt_feii_options["opt_disp_const"]["bool"]==False) | (opt_feii_options["opt_voff_const"]["bool"]==False):
 
@@ -9533,8 +9639,6 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
         # Return a list of arrays which will be unpacked during the fitting process
         return opt_feii_templates
 
-#### Optical FeII Template #########################################################
-
 def VC04_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
 
     # Unpack opt_feii_templates
@@ -9602,89 +9706,6 @@ def VC04_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, vel
 
     return br_opt_feii_template, na_opt_feii_template
 
-####################################################################################
-
-
-#### UV Iron Template ##############################################################
-    
-def initialize_uv_iron(lam_gal, feii_options, disp_res, fit_mask, velscale):
-    """
-    Generate UV Iron template.
-    """
-
-    # Load the data into Pandas DataFrames
-    data_dir = BADASS_DIR.joinpath("badass_data","feii_templates","vestergaard-wilkes_2001")
-    # df_uviron = pd.read_csv(str(data_dir.joinpath("VW01_UV_B_47_191.csv"))) # UV B+47+191
-    df_uviron = pd.read_csv(str(data_dir.joinpath("VW01_UV_B.csv"))) # UV B only
-
-    # Generate a new grid with the original resolution, but the size of the fitting region
-    dlam_uviron = df_uviron["angstrom"].to_numpy()[1]-df_uviron["angstrom"].to_numpy()[0] # angstroms
-    npad = 100 # anstroms
-    lam_uviron	 = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad,dlam_uviron) # angstroms
-    # Interpolate the original template onto the new grid
-    interp_ftn_uv = interp1d(df_uviron["angstrom"].to_numpy(),df_uviron["flux"].to_numpy(),kind='linear',bounds_error=False,fill_value=(1.e-10,1.e-10))
-    spec_uviron = interp_ftn_uv(lam_uviron)
-    # log-rebin the spectrum to same velocity scale as the input galaxy
-    lamRange_uviron = [np.min(lam_uviron), np.max(lam_uviron)]
-    spec_uviron_new, loglam_uviron, velscale_uviron = log_rebin(lamRange_uviron, spec_uviron, velscale=velscale)#[0]
-    # Pre-compute FFT of templates, since they do not change (only the LOSVD and convolution changes)
-    uv_iron_fft, npad = template_rfft(spec_uviron_new)
-    # The FeII templates are offset from the input galaxy spectrum by 100 A, so we 
-    # shift the spectrum to match that of the input galaxy.
-    c = 299792.458 # speed of light in km/s
-    vsyst = np.log(lam_uviron[0]/lam_gal[0])*c
-    # We return a tuple consisting of the FFT of the broad and narrow templates, npad, and vsyst, 
-    # which are needed for the convolution.
-
-    return (uv_iron_fft, npad, vsyst)
-
-####################################################################################
-
-#### Balmer Template ###############################################################
-
-def initialize_balmer(lam_gal, balmer_options, disp_res,fit_mask, velscale):
-    # Import the template for the higher-order balmer lines (7 <= n <= 500)
-    data_dir = BADASS_DIR.joinpath("badass_data","balmer_template")
-    # df = pd.read_csv(str(data_dir.joinpath("higher_order_balmer.csv")))
-    df = pd.read_csv(str(data_dir.joinpath("higher_order_balmer_n8_500.csv")))
-    # Generate a new grid with the original resolution, but the size of the fitting region
-    dlam_balmer = df["angstrom"].to_numpy()[1]-df["angstrom"].to_numpy()[0] # angstroms
-    npad = 100 # angstroms
-    lam_balmer = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad,dlam_balmer) # angstroms
-    # Interpolate the original template onto the new grid
-    interp_ftn_balmer = interp1d(df["angstrom"].to_numpy(),df["flux"].to_numpy(),kind='linear',bounds_error=False,fill_value=(1.e-10,1.e-10))
-    spec_high_balmer = interp_ftn_balmer(lam_balmer)
-    # Calculate the difference in instrumental dispersion between SDSS and the template
-    lamRange_balmer = [np.min(lam_balmer), np.max(lam_balmer)]
-    fwhm_balmer = 1.0
-    disp_balmer = fwhm_balmer/2.3548
-    disp_res_interp = np.interp(lam_balmer, lam_gal, disp_res)
-    disp_diff = np.sqrt((disp_res_interp**2 - disp_balmer**2).clip(0))
-    sigma = disp_diff/dlam_balmer # Sigma difference in pixels
-    # Convolve the FeII templates to the SDSS resolution
-    spec_high_balmer = gaussian_filter1d(spec_high_balmer, sigma)
-    # Log-rebin to same velocity scale as galaxy
-    spec_high_balmer_new, loglam_balmer, velscale_balmer = log_rebin(lamRange_balmer, spec_high_balmer, velscale=velscale)#[0]
-    if (np.sum(spec_high_balmer_new)>0):
-        # Normalize to 1
-        spec_high_balmer_new = spec_high_balmer_new/np.max(spec_high_balmer_new)
-    # Package the wavelength vector and template
-    balmer_template = (np.exp(loglam_balmer), spec_high_balmer_new, velscale_balmer)
-
-    return balmer_template
-
-####################################################################################
-
-
-def get_disp_res(disp_res_ftn,line_center,line_voff):
-        c = 299792.458
-        disp_res = (disp_res_ftn(line_center + 
-                      (line_voff*line_center/c))/(line_center + 
-                   (line_voff*line_center/c))*c)
-        return disp_res
-
-
-####################################################################################
 
 def K10_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
     """
@@ -9882,9 +9903,92 @@ def calculate_k10_rel_int(transition,center,gf,e2,I2,temp):
         return rel_int
 
 
-##################################################################################
+def P22_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
 
-##################################################################################
+	# Unpack opt_feii_templates
+	# Parse FeII options
+	#
+	if (opt_feii_options['opt_amp_const']['bool']==False): # if amp not constant
+		opt_feii_amp = p['OPT_FEII_AMP']
+	elif (opt_feii_options['opt_amp_const']['bool']==True): # if amp constant
+		opt_feii_amp = opt_feii_options['opt_amp_const']['opt_feii_val']
+
+	#
+	if (opt_feii_options['opt_disp_const']['bool']==False): # if amp not constant
+		opt_feii_disp = p['OPT_FEII_DISP']
+	elif (opt_feii_options['opt_disp_const']['bool']==True): # if amp constant
+		opt_feii_disp = opt_feii_options['opt_disp_const']['opt_feii_val']
+	#
+	if (opt_feii_options['opt_voff_const']['bool']==False): # if amp not constant
+		opt_feii_voff = p['OPT_FEII_VOFF']
+	elif (opt_feii_options['opt_voff_const']['bool']==True): # if amp constant
+		opt_feii_voff = opt_feii_options['opt_voff_const']['opt_feii_val']
+
+	#
+	if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+		feii_conv_temp = opt_feii_templates
+
+		opt_feii_template = feii_conv_temp * opt_feii_amp
+
+		opt_feii_template = opt_feii_template.reshape(-1)
+
+		# Set fitting region outside of template to zero to prevent convolution loops
+		opt_feii_template[(lam_gal < 4000) & (lam_gal > 5600)] = 0
+
+	elif (opt_feii_options["opt_disp_const"]["bool"]==False) | (opt_feii_options["opt_voff_const"]["bool"]==False):
+		opt_feii_fft, npad, vsyst = opt_feii_templates
+
+		p22_conv_temp = convolve_gauss_hermite(opt_feii_fft, npad, float(velscale),
+										 	 [opt_feii_voff, opt_feii_disp], lam_gal.shape[0], 
+										  	 velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+		#
+
+		# Re-normalize to 1
+		opt_feii_template = opt_feii_amp * p22_conv_temp
+
+		# Reshape
+		opt_feii_template = opt_feii_template.reshape(-1)
+
+		# Set fitting region outside of template to zero to prevent convolution loops
+		opt_feii_template[(lam_gal < 4000) & (lam_gal > 5600)] = 0
+
+	return opt_feii_template
+
+####################################################################################
+
+
+#### UV Iron Template ##############################################################
+    
+def initialize_uv_iron(lam_gal, feii_options, disp_res, fit_mask, velscale):
+    """
+    Generate UV Iron template.
+    """
+
+    # Load the data into Pandas DataFrames
+    data_dir = BADASS_DIR.joinpath("badass_data","feii_templates","vestergaard-wilkes_2001")
+    # df_uviron = pd.read_csv(str(data_dir.joinpath("VW01_UV_B_47_191.csv"))) # UV B+47+191
+    df_uviron = pd.read_csv(str(data_dir.joinpath("VW01_UV_B.csv"))) # UV B only
+
+    # Generate a new grid with the original resolution, but the size of the fitting region
+    dlam_uviron = df_uviron["angstrom"].to_numpy()[1]-df_uviron["angstrom"].to_numpy()[0] # angstroms
+    npad = 100 # anstroms
+    lam_uviron	 = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad,dlam_uviron) # angstroms
+    # Interpolate the original template onto the new grid
+    interp_ftn_uv = interp1d(df_uviron["angstrom"].to_numpy(),df_uviron["flux"].to_numpy(),kind='linear',bounds_error=False,fill_value=(1.e-10,1.e-10))
+    spec_uviron = interp_ftn_uv(lam_uviron)
+    # log-rebin the spectrum to same velocity scale as the input galaxy
+    lamRange_uviron = [np.min(lam_uviron), np.max(lam_uviron)]
+    spec_uviron_new, loglam_uviron, velscale_uviron = log_rebin(lamRange_uviron, spec_uviron, velscale=velscale)#[0]
+    # Pre-compute FFT of templates, since they do not change (only the LOSVD and convolution changes)
+    uv_iron_fft, npad = template_rfft(spec_uviron_new)
+    # The FeII templates are offset from the input galaxy spectrum by 100 A, so we 
+    # shift the spectrum to match that of the input galaxy.
+    c = 299792.458 # speed of light in km/s
+    vsyst = np.log(lam_uviron[0]/lam_gal[0])*c
+    # We return a tuple consisting of the FFT of the broad and narrow templates, npad, and vsyst, 
+    # which are needed for the convolution.
+
+    return (uv_iron_fft, npad, vsyst)
 
 def VW01_uv_iron_template(lam_gal, pdict, uv_iron_template, uv_iron_options, velscale, run_dir):
     """
@@ -9941,9 +10045,40 @@ def VW01_uv_iron_template(lam_gal, pdict, uv_iron_template, uv_iron_options, vel
 
     return template
 
-##################################################################################
+####################################################################################
 
-##################################################################################
+#### Balmer Template ###############################################################
+
+def initialize_balmer(lam_gal, balmer_options, disp_res,fit_mask, velscale):
+    # Import the template for the higher-order balmer lines (7 <= n <= 500)
+    data_dir = BADASS_DIR.joinpath("badass_data","balmer_template")
+    # df = pd.read_csv(str(data_dir.joinpath("higher_order_balmer.csv")))
+    df = pd.read_csv(str(data_dir.joinpath("higher_order_balmer_n8_500.csv")))
+    # Generate a new grid with the original resolution, but the size of the fitting region
+    dlam_balmer = df["angstrom"].to_numpy()[1]-df["angstrom"].to_numpy()[0] # angstroms
+    npad = 100 # angstroms
+    lam_balmer = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad,dlam_balmer) # angstroms
+    # Interpolate the original template onto the new grid
+    interp_ftn_balmer = interp1d(df["angstrom"].to_numpy(),df["flux"].to_numpy(),kind='linear',bounds_error=False,fill_value=(1.e-10,1.e-10))
+    spec_high_balmer = interp_ftn_balmer(lam_balmer)
+    # Calculate the difference in instrumental dispersion between SDSS and the template
+    lamRange_balmer = [np.min(lam_balmer), np.max(lam_balmer)]
+    fwhm_balmer = 1.0
+    disp_balmer = fwhm_balmer/2.3548
+    disp_res_interp = np.interp(lam_balmer, lam_gal, disp_res)
+    disp_diff = np.sqrt((disp_res_interp**2 - disp_balmer**2).clip(0))
+    sigma = disp_diff/dlam_balmer # Sigma difference in pixels
+    # Convolve the FeII templates to the SDSS resolution
+    spec_high_balmer = gaussian_filter1d(spec_high_balmer, sigma)
+    # Log-rebin to same velocity scale as galaxy
+    spec_high_balmer_new, loglam_balmer, velscale_balmer = log_rebin(lamRange_balmer, spec_high_balmer, velscale=velscale)#[0]
+    if (np.sum(spec_high_balmer_new)>0):
+        # Normalize to 1
+        spec_high_balmer_new = spec_high_balmer_new/np.max(spec_high_balmer_new)
+    # Package the wavelength vector and template
+    balmer_template = (np.exp(loglam_balmer), spec_high_balmer_new, velscale_balmer)
+
+    return balmer_template
 
 def generate_balmer_continuum(lam_gal,lam_balmer, spec_high_balmer,velscale, 
                               balmer_ratio, balmer_amp, balmer_disp, balmer_voff, balmer_Teff, balmer_tau):
@@ -10009,7 +10144,18 @@ def generate_balmer_continuum(lam_gal,lam_balmer, spec_high_balmer,velscale,
 
     return conv_temp
 
-##################################################################################
+####################################################################################
+
+
+def get_disp_res(disp_res_ftn,line_center,line_voff):
+        c = 299792.458
+        disp_res = (disp_res_ftn(line_center + 
+                      (line_voff*line_center/c))/(line_center + 
+                   (line_voff*line_center/c))*c)
+        return disp_res
+
+
+####################################################################################
 
 #### Simple Power-Law Template ###################################################
 
@@ -12603,6 +12749,9 @@ def plotly_best_fit(objname,line_list,fit_mask,run_dir):
         if comp=="UV_IRON_TEMPLATE":
             tracename="UV Iron"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["UV_IRON_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#AB63FA", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
+        if comp=="OPT_FEII_TEMPLATE": # for P22 template
+            tracename="FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)        
         if comp=="NA_OPT_FEII_TEMPLATE":
             tracename="Narrow FeII"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["NA_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
@@ -12972,6 +13121,11 @@ def write_log(output_val,output_type,run_dir):
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_disp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_disp_const']['bool']),str(opt_feii_options['opt_disp_const']['opt_feii_val']),)))
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_voff_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_voff_const']['bool']),str(opt_feii_options['opt_voff_const']['opt_feii_val']),)))
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_temp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_temp_const']['bool']),str(opt_feii_options['opt_temp_const']['opt_feii_val']),)))
+            if (comp_options['fit_opt_feii']==True) and (opt_feii_options['opt_template']['type']=='P22'):
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_template:',':','type: %s' % str(opt_feii_options['opt_template']['type']) ))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_amp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_amp_const']['bool']),str(opt_feii_options['opt_amp_const']['opt_feii_val']))))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_disp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_disp_const']['bool']),str(opt_feii_options['opt_disp_const']['opt_feii_val']))))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_voff_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_voff_const']['bool']),str(opt_feii_options['opt_voff_const']['opt_feii_val']))))
             elif comp_options["fit_opt_feii"]==False:
                 logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   opt_feii_options:','',''))
                 logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('','','Optical FeII fitting is turned off.' )) 
