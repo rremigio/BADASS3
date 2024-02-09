@@ -9526,7 +9526,7 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
         
             # We return a tuple consisting of the FFT of the broad and narrow templates, npad, and vsyst, 
             # which are needed for the convolution.
-            opt_feii_templates =(br_opt_feii_fft, na_opt_feii_fft, npad, vsyst)
+            opt_feii_templates =(p22_opt_feii_fft, npad, vsyst)
 
         return opt_feii_templates 
 
