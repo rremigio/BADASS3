@@ -2830,11 +2830,11 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         fwhm_temp = 2.51 # eMILES spectra have a constant resolution FWHM of 2.51A (linear)
         disp_temp = fwhm_temp/2.3548
     if (losvd_options["library"]=="M11z002"):
-        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp/z002")
+        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp", "z002")
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
     if (losvd_options["library"]=="M11z004"):
-        temp_dir  = datadir.joinpath("M11_ELODIE_ssp/z004")
+        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp", "z004")
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
 
@@ -9478,7 +9478,8 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
 
     elif (opt_feii_options['opt_template']['type']=='P22'):
 		# open daesong's iron template
-        p22_temp = np.genfromtxt('badass_data_files/feii_templates/park_2022/tab1.txt')
+        data_dir = BADASS_DIR.joinpath("badass_data", "feii_templates", "park_2022")
+        p22_temp = np.genfromtxt( str(data_dir.joinpath("tab1.txt")) )
         p22_wav  = p22_temp[:, 0]
         p22_flux = p22_temp[:, 1]/np.max(p22_temp[:, 1]) # NORMALIZE, even though the maximum is already at 0.7 ish
 
