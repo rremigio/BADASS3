@@ -10185,7 +10185,8 @@ def simple_power_law(x,amp,alpha):
 
     # RR - since I am working with nearby seyferts, set the pivot wavelength to 5100 A 
     C = amp * (x/5100)**alpha
-    return 
+
+    return C 
 
 ##################################################################################
 
