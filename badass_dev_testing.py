@@ -61,7 +61,7 @@ sys.path.insert(0, str(BADASS_DIR))
 sys.path.insert(1,str(BADASS_DIR.joinpath('badass_utils'))) # utility functions
 sys.path.insert(1,str(BADASS_DIR.joinpath('badass_tools'))) # tool functions
 
-import badass_check_input as badass_check_input
+import badass_check_input_dev_testing as badass_check_input
 import badass_test_suite  as badass_test_suite
 import badass_tools as badass_tools
 import gh_alternative as gh_alt # Gauss-Hermite alternative line profiles
@@ -317,6 +317,7 @@ def run_BADASS(data,
                host_options=False,
                power_options=False,
                poly_options=False,
+               agn_temp_options=False, #### I AM ADDING THIS WATCH OUT
                opt_feii_options=False,
                uv_iron_options=False,
                balmer_options=False,
@@ -365,7 +366,7 @@ def run_BADASS(data,
         arguments = [(pathlib.Path(file), options_file, dust_cache, fit_options, test_options, mcmc_options, comp_options,
                       narrow_options, broad_options, absorp_options,
                       pca_options, user_lines, user_constraints, user_mask,
-                      combined_lines, losvd_options, host_options, power_options, poly_options, opt_feii_options, uv_iron_options, balmer_options,
+                      combined_lines, losvd_options, host_options, power_options, poly_options, agn_temp_options, opt_feii_options, uv_iron_options, balmer_options,
                       outflow_test_options, plot_options, output_options, sdss_spec, ifu_spec, spec, wave, err, fwhm_res, z, ebv, flux_norm) for file in files]
 
         # map arguments to function
@@ -387,7 +388,7 @@ def run_BADASS(data,
                           narrow_options, broad_options, absorp_options,
                           pca_options,
                           user_lines, user_constraints, user_mask, combined_lines, losvd_options, host_options, power_options, poly_options,
-                          opt_feii_options, uv_iron_options, balmer_options, outflow_test_options, plot_options, output_options,
+                          agn_temp_options, opt_feii_options, uv_iron_options, balmer_options, outflow_test_options, plot_options, output_options,
                           sdss_spec, ifu_spec, spec, wave, err, fwhm_res, z, ebv, flux_norm)
 
     # Print memory at the end
@@ -415,6 +416,7 @@ def run_single_thread(fits_file,
                host_options=False,
                power_options=False,
                poly_options=False,
+               agn_temp_options=False,
                opt_feii_options=False,
                uv_iron_options=False,
                balmer_options=False,
@@ -481,6 +483,8 @@ def run_single_thread(fits_file,
                 power_options		 = options.power_options
             if hasattr(options,"poly_options"):
                 poly_options         = options.poly_options
+            if hasattr(options,"agn_temp_options"):
+                agn_temp_options     = options.agn_temp_options
             if hasattr(options,"opt_feii_options"):
                 opt_feii_options	 = options.opt_feii_options
             if hasattr(options,"uv_iron_options"):
@@ -516,6 +520,7 @@ def run_single_thread(fits_file,
     host_options		 = badass_check_input.check_host_options(host_options)
     power_options		 = badass_check_input.check_power_options(power_options)
     poly_options         = badass_check_input.check_poly_options(poly_options)
+    agn_temp_options     = badass_check_input.check_agn_temp_options(agn_temp_options)
     opt_feii_options	 = badass_check_input.check_opt_feii_options(opt_feii_options)
     uv_iron_options		 = badass_check_input.check_uv_iron_options(uv_iron_options)
     balmer_options		 = badass_check_input.check_balmer_options(balmer_options)
@@ -569,6 +574,7 @@ def run_single_thread(fits_file,
     fit_host			= comp_options["fit_host"]
     fit_power			= comp_options["fit_power"]
     fit_poly            = comp_options["fit_poly"]
+    fit_agn             = comp_options["fit_agn"]
     fit_narrow			= comp_options["fit_narrow"]
     fit_broad			= comp_options["fit_broad"]
     fit_absorp			= comp_options["fit_absorp"]
@@ -675,7 +681,7 @@ def run_single_thread(fits_file,
         
 
     # Write to Log 
-    write_log((fit_options,mcmc_options,comp_options,pca_options,losvd_options,host_options,power_options,poly_options,opt_feii_options,uv_iron_options,balmer_options,
+    write_log((fit_options,mcmc_options,comp_options,pca_options,losvd_options,host_options,power_options,poly_options,agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                plot_options,output_options),'fit_information',run_dir)
                
     write_log((do_pca,n_components,pca_masks,pca_nan_fix,pca_exp_var),'pca_information',run_dir)
@@ -697,6 +703,12 @@ def run_single_thread(fits_file,
         stel_templates = prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res,fit_mask, losvd_options, run_dir)
     elif (fit_losvd==False):
         stel_templates = None
+                
+    # Generate AGN emission template for the seyfert 1s
+    if (fit_agn==True):
+        agn_template = generate_agn_template(lam_gal, agn_temp_options, fit_mask)
+    elif (fit_agn==False):
+        agn_template = None
 
     # For the Optical FeII, UV Iron, and Balmer templates, we disable the templates if the fitting region
     # is entirely outside of the range of the templates.  This saves resources.
@@ -785,9 +797,9 @@ def run_single_thread(fits_file,
         param_dict, line_list, combined_line_list, soft_cons, ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                      comp_options,narrow_options,broad_options,absorp_options,
                                      user_lines,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                     opt_feii_options,uv_iron_options,balmer_options,
+                                     agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                      run_dir,fit_type='init',fit_stat=fit_stat,
-                                     fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
+                                     fit_agn=fit_agn,fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
                                      fit_losvd=fit_losvd,fit_host=fit_host,fit_power=fit_power,fit_poly=fit_poly,
                                      fit_narrow=fit_narrow,fit_broad=fit_broad,fit_absorp=fit_absorp,
                                      tie_line_disp=tie_line_disp,tie_line_voff=tie_line_voff,verbose=verbose)
@@ -869,11 +881,13 @@ def run_single_thread(fits_file,
                                host_options,
                                power_options,
                                poly_options,
+                               agn_temp_options,
                                opt_feii_options,
                                uv_iron_options,
                                balmer_options,
                                outflow_test_options,
                                host_template,
+                               agn_template,
                                opt_feii_templates,
                                uv_iron_template,
                                balmer_template,
@@ -915,9 +929,9 @@ def run_single_thread(fits_file,
         param_dict, line_list, combined_line_list, soft_cons, ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                      comp_options,narrow_options,broad_options,absorp_options,
                                      user_lines,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                     opt_feii_options,uv_iron_options,balmer_options,
+                                     agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                      run_dir,fit_type='init',fit_stat=fit_stat,
-                                     fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
+                                     fit_agn=fit_agn,fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
                                      fit_losvd=fit_losvd,fit_host=fit_host,fit_power=fit_power,fit_poly=fit_poly,
                                      fit_narrow=fit_narrow,fit_broad=fit_broad,fit_absorp=fit_absorp,
                                      tie_line_disp=tie_line_disp,tie_line_voff=tie_line_voff,verbose=verbose)
@@ -968,11 +982,13 @@ def run_single_thread(fits_file,
                                host_options,
                                power_options,
                                poly_options,
+                               agn_temp_options,
                                opt_feii_options,
                                uv_iron_options,
                                balmer_options,
                                outflow_test_options,
                                host_template,
+                               agn_template,
                                opt_feii_templates,
                                uv_iron_template,
                                balmer_template,
@@ -1014,9 +1030,9 @@ def run_single_thread(fits_file,
     param_dict, line_list, combined_line_list, soft_cons, ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                  comp_options,narrow_options,broad_options,absorp_options,
                                  user_lines,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                 opt_feii_options,uv_iron_options,balmer_options,
+                                 agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                  run_dir,fit_type='init',fit_stat=fit_stat,
-                                 fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
+                                 fit_agn=fit_agn,fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
                                  fit_losvd=fit_losvd,fit_host=fit_host,fit_power=fit_power,fit_poly=fit_poly,
                                  fit_narrow=fit_narrow,fit_broad=fit_broad,fit_absorp=fit_absorp,
                                  tie_line_disp=tie_line_disp,tie_line_voff=tie_line_voff,verbose=verbose)
@@ -1057,6 +1073,7 @@ def run_single_thread(fits_file,
             host_options,
             power_options,
             poly_options,
+            agn_temp_options,
             opt_feii_options,
             uv_iron_options,
             balmer_options,
@@ -1092,11 +1109,13 @@ def run_single_thread(fits_file,
                                                 host_options,
                                                 power_options,
                                                 poly_options,
+                                                agn_temp_options,
                                                 opt_feii_options,
                                                 uv_iron_options,
                                                 balmer_options,
                                                 outflow_test_options,
                                                 host_template,
+                                                agn_template,
                                                 opt_feii_templates,
                                                 uv_iron_template,
                                                 balmer_template,
@@ -1172,9 +1191,9 @@ def run_single_thread(fits_file,
     param_dict, line_list, combined_line_list, soft_cons, ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                                            comp_options,narrow_options,broad_options,absorp_options,
                                                            user_lines,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                                           opt_feii_options,uv_iron_options,balmer_options,
+                                                           agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                                            run_dir,fit_type='final',fit_stat=fit_stat,
-                                                           fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
+                                                           fit_agn=fit_agn,fit_opt_feii=fit_opt_feii,fit_uv_iron=fit_uv_iron,fit_balmer=fit_balmer,
                                                            fit_losvd=fit_losvd,fit_host=fit_host,fit_power=fit_power,fit_poly=fit_poly,
                                                            fit_narrow=fit_narrow,fit_broad=fit_broad,fit_absorp=fit_absorp,
                                                            tie_line_disp=tie_line_disp,tie_line_voff=tie_line_voff,
@@ -1238,11 +1257,13 @@ def run_single_thread(fits_file,
                  host_options,
                  power_options,
                  poly_options,
+                 agn_temp_options,
                  opt_feii_options,
                  uv_iron_options,
                  balmer_options,
                  outflow_test_options,
                  host_template,
+                 agn_template,
                  opt_feii_templates,
                  uv_iron_template,
                  balmer_template,
@@ -1354,11 +1375,13 @@ def run_single_thread(fits_file,
                     host_options,
                     power_options,
                     poly_options,
+                    agn_temp_options,
                     opt_feii_options,
                     uv_iron_options,
                     balmer_options,
                     outflow_test_options,
                     host_template,
+                    agn_template,
                     opt_feii_templates,
                     uv_iron_template,
                     balmer_template,
@@ -2830,11 +2853,11 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         fwhm_temp = 2.51 # eMILES spectra have a constant resolution FWHM of 2.51A (linear)
         disp_temp = fwhm_temp/2.3548
     if (losvd_options["library"]=="M11z002"):
-        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z002/"
+        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp", "z002")
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
     if (losvd_options["library"]=="M11z004"):
-        temp_dir  = "badass_data_files/M11_ELODIE_ssp/z004/"
+        temp_dir  = data_dir.joinpath("M11_ELODIE_ssp", "z004")
         fwhm_temp = 0.550
         disp_temp = fwhm_temp/2.3548 
 
@@ -2949,9 +2972,9 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
 def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale,
                     comp_options,narrow_options,broad_options,absorp_options,
                     user_lines,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                    opt_feii_options,uv_iron_options,balmer_options,
+                    agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                     run_dir,fit_type='init',fit_stat="ML",
-                    fit_opt_feii=True,fit_uv_iron=True,fit_balmer=True,
+                    fit_agn=False,fit_opt_feii=True,fit_uv_iron=True,fit_balmer=True,
                     fit_losvd=False,fit_host=True,fit_power=True,fit_poly=False,
                     fit_narrow=True,fit_broad=True,fit_absorp=True,
                     tie_line_disp=False,tie_line_voff=False,remove_lines=False,verbose=True):
@@ -3013,13 +3036,13 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
         if losvd_options["vel_const"]["bool"]==False:
             #
             par_input['STEL_VEL'] = ({'init':100. ,
-                                         'plim':(-500.,500.),
+                                         'plim':(-300.,300.),
                                         })
         # Stellar velocity dispersion
         if losvd_options["disp_const"]["bool"]==False:
             #
             par_input['STEL_DISP'] = ({'init':150.0,
-                                           'plim':(0.001,500.),
+                                           'plim':(0.001,300.),
                                          })
 
     ##############################################################################
@@ -3054,7 +3077,7 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
                                       })
         # AGN simple power-law slope
         par_input['POWER_SLOPE'] = ({'init':-1.0  ,
-                                        'plim':(-6.0,6.0),
+                                        'plim':(-3.0,0.0),
                                         })
         
     #### Smoothly-Broken Power-Law (AGN continuum) ###############################
@@ -3082,6 +3105,15 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
                                             'plim':(0.01,1.0),
                                         })
         
+    #### AGN Templates  ##########################################################
+    if (fit_agn==True):
+        if verbose:
+            print('\t- Fitting AGN template.')
+        
+        # The only parameter to worry about is the amplitude
+        par_input['AGN_TEMP_AMP'] = ({'init':(0.5*median_flux),
+                                         'plim':(0,max_flux),
+                                         })
     ##############################################################################
 
     #### Optical FeII Templates ##################################################
@@ -4776,11 +4808,13 @@ def line_test(param_dict,
               host_options,
               power_options,
               poly_options,
+              agn_temp_options,
               opt_feii_options,
               uv_iron_options,
               balmer_options,
               outflow_test_options,
               host_template,
+              agn_template,
               opt_feii_templates,
               uv_iron_template,
               balmer_template,
@@ -4879,9 +4913,9 @@ def line_test(param_dict,
                 _param_dict, _line_list, _combined_line_list, _soft_cons, _ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                      comp_options,narrow_options,broad_options,absorp_options,
                                      user_line_list,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                     opt_feii_options,uv_iron_options,balmer_options,
+                                     agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                      run_dir,fit_type='init',fit_stat=fit_stat,
-                                     fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
+                                     fit_agn=comp_options["fit_agn"],fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
                                      fit_losvd=comp_options["fit_losvd"],fit_host=comp_options["fit_host"],fit_power=comp_options["fit_power"],fit_poly=comp_options["fit_poly"],
                                      fit_narrow=comp_options["fit_narrow"],fit_broad=comp_options["fit_broad"],fit_absorp=comp_options["fit_absorp"],
                                      tie_line_disp=comp_options["tie_line_disp"],tie_line_voff=comp_options["tie_line_voff"],remove_lines=False,verbose=False)
@@ -4926,11 +4960,13 @@ def line_test(param_dict,
                                                        host_options,
                                                        power_options,
                                                        poly_options,
+                                                       agn_temp_options,
                                                        opt_feii_options,
                                                        uv_iron_options,
                                                        balmer_options,
                                                        outflow_test_options,
                                                        host_template,
+                                                       agn_template,
                                                        opt_feii_templates,
                                                        uv_iron_template,
                                                        balmer_template,
@@ -5040,9 +5076,9 @@ def line_test(param_dict,
                 _param_dict, _line_list, _combined_line_list, _soft_cons, _ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                      comp_options,narrow_options,broad_options,absorp_options,
                                      user_line_list,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                     opt_feii_options,uv_iron_options,balmer_options,
+                                     agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                      run_dir,fit_type='init',fit_stat=fit_stat,
-                                     fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
+                                     fit_agn=comp_options["fit_agn"],fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
                                      fit_losvd=comp_options["fit_losvd"],fit_host=comp_options["fit_host"],fit_power=comp_options["fit_power"],fit_poly=comp_options["fit_poly"],
                                      fit_narrow=comp_options["fit_narrow"],fit_broad=comp_options["fit_broad"],fit_absorp=comp_options["fit_absorp"],
                                      tie_line_disp=comp_options["tie_line_disp"],tie_line_voff=comp_options["tie_line_voff"],remove_lines=remove_lines,verbose=False)
@@ -5092,11 +5128,13 @@ def line_test(param_dict,
                                                        host_options,
                                                        power_options,
                                                        poly_options,
+                                                       agn_temp_options,
                                                        opt_feii_options,
                                                        uv_iron_options,
                                                        balmer_options,
                                                        outflow_test_options,
                                                        host_template,
+                                                       agn_template,
                                                        opt_feii_templates,
                                                        uv_iron_template,
                                                        balmer_template,
@@ -5118,7 +5156,8 @@ def line_test(param_dict,
                                                        force_best=test_options["force_best"],
                                                        force_thresh=force_thresh,
                                                        full_verbose=test_options["full_verbose"],
-                                                       verbose=test_options["full_verbose"])
+                                                       verbose=test_options["full_verbose"]
+                                                       )
 
                 if test_options["full_verbose"]:
                     
@@ -5449,11 +5488,13 @@ def config_test(param_dict,
               host_options,
               power_options,
               poly_options,
+              agn_temp_options,
               opt_feii_options,
               uv_iron_options,
               balmer_options,
               outflow_test_options,
               host_template,
+              agn_template,
               opt_feii_templates,
               uv_iron_template,
               balmer_template,
@@ -5531,9 +5572,9 @@ def config_test(param_dict,
             _param_dict, _line_list, _combined_line_list, _soft_cons, _ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                  comp_options,narrow_options,broad_options,absorp_options,
                                  user_line_list,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                 opt_feii_options,uv_iron_options,balmer_options,
+                                 agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                  run_dir,fit_type='init',fit_stat=fit_stat,
-                                 fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
+                                 fit_agn=comp_options["fit_agn"],fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
                                  fit_losvd=comp_options["fit_losvd"],fit_host=comp_options["fit_host"],fit_power=comp_options["fit_power"],fit_poly=comp_options["fit_poly"],
                                  fit_narrow=comp_options["fit_narrow"],fit_broad=comp_options["fit_broad"],fit_absorp=comp_options["fit_absorp"],
                                  tie_line_disp=comp_options["tie_line_disp"],tie_line_voff=comp_options["tie_line_voff"],remove_lines=False,verbose=False)
@@ -5578,11 +5619,13 @@ def config_test(param_dict,
                                                    host_options,
                                                    power_options,
                                                    poly_options,
+                                                   agn_temp_options,
                                                    opt_feii_options,
                                                    uv_iron_options,
                                                    balmer_options,
                                                    outflow_test_options,
                                                    host_template,
+                                                   agn_template,
                                                    opt_feii_templates,
                                                    uv_iron_template,
                                                    balmer_template,
@@ -5672,9 +5715,9 @@ def config_test(param_dict,
             _param_dict, _line_list, _combined_line_list, _soft_cons, _ncomp_dict = initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask,velscale,
                                  comp_options,narrow_options,broad_options,absorp_options,
                                  user_line_list,user_constraints,combined_lines,losvd_options,host_options,power_options,poly_options,
-                                 opt_feii_options,uv_iron_options,balmer_options,
+                                 agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,
                                  run_dir,fit_type='init',fit_stat=fit_stat,
-                                 fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
+                                 fit_agn=comp_options["fit_agn"],fit_opt_feii=comp_options["fit_opt_feii"],fit_uv_iron=comp_options["fit_uv_iron"],fit_balmer=comp_options["fit_balmer"],
                                  fit_losvd=comp_options["fit_losvd"],fit_host=comp_options["fit_host"],fit_power=comp_options["fit_power"],fit_poly=comp_options["fit_poly"],
                                  fit_narrow=comp_options["fit_narrow"],fit_broad=comp_options["fit_broad"],fit_absorp=comp_options["fit_absorp"],
                                  tie_line_disp=comp_options["tie_line_disp"],tie_line_voff=comp_options["tie_line_voff"],remove_lines=remove_lines,verbose=False)
@@ -5724,11 +5767,13 @@ def config_test(param_dict,
                                                    host_options,
                                                    power_options,
                                                    poly_options,
+                                                   agn_temp_options,
                                                    opt_feii_options,
                                                    uv_iron_options,
                                                    balmer_options,
                                                    outflow_test_options,
                                                    host_template,
+                                                   agn_template,
                                                    opt_feii_templates,
                                                    uv_iron_template,
                                                    balmer_template,
@@ -6234,6 +6279,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
         elif (key=='MPOLY'):
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
 
+        elif (key=='AGN_TEMPLATE'):
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='AGN')
+        
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
@@ -6342,6 +6390,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['APOLY'], color='xkcd:bright purple' , linewidth=0.5, linestyle='-', label='%s-order Add. Poly.' % (poly_label("apoly")))
         elif (key=='MPOLY'):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
+            
+        elif (key=='AGN_TEMPLATE'):
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='AGN')
 
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
@@ -6511,6 +6562,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['APOLY'], color='xkcd:bright purple' , linewidth=0.5, linestyle='-', label='%s-order Add. Poly.' % (poly_label("apoly")))
         elif (key=='MPOLY'):
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
+            
+        elif (key=='AGN_TEMPLATE'):
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='AGN')
 
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
@@ -6619,6 +6673,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['APOLY'], color='xkcd:bright purple' , linewidth=0.5, linestyle='-', label='%s-order Add. Poly.' % (poly_label("apoly")))
         elif (key=='MPOLY'):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
+            
+        elif (key=='AGN_TEMPLATE'):
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='AGN')
 
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
@@ -7050,11 +7107,13 @@ def max_likelihood(param_dict,
                    host_options,
                    power_options,
                    poly_options,
+                   agn_temp_options,
                    opt_feii_options,
                    uv_iron_options,
                    balmer_options,
                    outflow_test_options,
                    host_template,
+                   agn_template,
                    opt_feii_templates,
                    uv_iron_template,
                    balmer_template,
@@ -7145,8 +7204,8 @@ def max_likelihood(param_dict,
 
             current_comps = fit_model(x,param_names,line_list,combined_line_list,lam_gal,galaxy,noise,
                                       comp_options,losvd_options,host_options,power_options,poly_options,
-                                      opt_feii_options,uv_iron_options,balmer_options,outflow_test_options,
-                                      host_template,opt_feii_templates,uv_iron_template,balmer_template,
+                                      agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,outflow_test_options,
+                                      host_template,agn_template,opt_feii_templates,uv_iron_template,balmer_template,
                                       stel_templates,blob_pars,disp_res,fit_mask,velscale,run_dir,"init",
                                       fit_stat,True)
             rmse = badass_test_suite.root_mean_squared_error(copy.deepcopy(current_comps["DATA"]),copy.deepcopy(current_comps["MODEL"]))
@@ -7214,11 +7273,13 @@ def max_likelihood(param_dict,
                                                          host_options,
                                                          power_options,
                                                          poly_options,
+                                                         agn_temp_options,
                                                          opt_feii_options,
                                                          uv_iron_options,
                                                          balmer_options,
                                                          outflow_test_options,
                                                          host_template,
+                                                         agn_template,
                                                          opt_feii_templates,
                                                          uv_iron_template,
                                                          balmer_template,
@@ -7259,11 +7320,13 @@ def max_likelihood(param_dict,
                           host_options,
                           power_options,
                           poly_options,
+                          agn_temp_options,
                           opt_feii_options,
                           uv_iron_options,
                           balmer_options,
                           outflow_test_options,
                           host_template,
+                          agn_template,
                           opt_feii_templates,
                           uv_iron_template,
                           balmer_template,
@@ -7449,11 +7512,13 @@ def max_likelihood(param_dict,
                                              host_options,
                                              power_options,
                                              poly_options,
+                                             agn_temp_options,
                                              opt_feii_options,
                                              uv_iron_options,
                                              balmer_options,
                                              outflow_test_options,
                                              host_template,
+                                             agn_template,
                                              opt_feii_templates,
                                              uv_iron_template,
                                              balmer_template,
@@ -7495,11 +7560,13 @@ def max_likelihood(param_dict,
                                   host_options,
                                   power_options,
                                   poly_options,
+                                  agn_temp_options,
                                   opt_feii_options,
                                   uv_iron_options,
                                   balmer_options,
                                   outflow_test_options,
                                   host_template,
+                                  agn_template,
                                   opt_feii_templates,
                                   uv_iron_template,
                                   balmer_template,
@@ -7763,11 +7830,13 @@ def max_likelihood(param_dict,
                           host_options,
                           power_options,
                           poly_options,
+                          agn_temp_options,
                           opt_feii_options,
                           uv_iron_options,
                           balmer_options,
                           outflow_test_options,
                           host_template,
+                          agn_template,
                           opt_feii_templates,
                           uv_iron_template,
                           balmer_template,
@@ -7978,6 +8047,9 @@ def max_like_plot(lam_gal,comp_dict,line_list,params,param_names,fit_mask,fit_no
             elif (key=='MPOLY'):
                 ax1.plot(comp_dict['WAVE'], comp_dict['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
 
+            elif (key=='AGN_TEMPLATE'):
+                ax1.plot(comp_dict['WAVE'], comp_dict['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='AGN')
+                
             elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
                 ax1.plot(comp_dict['WAVE'], comp_dict['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
                 ax1.plot(comp_dict['WAVE'], comp_dict['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
@@ -8123,11 +8195,13 @@ def lnlike(params,
            host_options,
            power_options,
            poly_options,
+           agn_temp_options,
            opt_feii_options,
            uv_iron_options,
            balmer_options,
            outflow_test_options,
            host_template,
+           agn_template,
            opt_feii_templates,
            uv_iron_template,
            balmer_template,
@@ -8161,11 +8235,13 @@ def lnlike(params,
                                                                                   host_options,
                                                                                   power_options,
                                                                                   poly_options,
+                                                                                  agn_temp_options,
                                                                                   opt_feii_options,
                                                                                   uv_iron_options,
                                                                                   balmer_options,
                                                                                   outflow_test_options,
                                                                                   host_template,
+                                                                                  agn_template,
                                                                                   opt_feii_templates,
                                                                                   uv_iron_template,
                                                                                   balmer_template,
@@ -8209,11 +8285,13 @@ def lnlike(params,
                                      host_options,
                                      power_options,
                                      poly_options,
+                                     agn_temp_options,
                                      opt_feii_options,
                                      uv_iron_options,
                                      balmer_options,
                                      outflow_test_options,
                                      host_template,
+                                     agn_template,
                                      opt_feii_templates,
                                      uv_iron_template,
                                      balmer_template,
@@ -8380,11 +8458,13 @@ def lnprob(params,
            host_options,
            power_options,
            poly_options,
+           agn_temp_options,
            opt_feii_options,
            uv_iron_options,
            balmer_options,
            outflow_test_options,
            host_template,
+           agn_template,
            opt_feii_templates,
            uv_iron_template,
            balmer_template,
@@ -8418,11 +8498,13 @@ def lnprob(params,
                                                                              host_options,
                                                                              power_options,
                                                                              poly_options,
+                                                                             agn_temp_options,
                                                                              opt_feii_options,
                                                                              uv_iron_options,
                                                                              balmer_options,
                                                                              outflow_test_options,
                                                                              host_template,
+                                                                             agn_template,
                                                                              opt_feii_templates,
                                                                              uv_iron_template,
                                                                              balmer_template,
@@ -8459,11 +8541,13 @@ def lnprob(params,
                 host_options,
                 power_options,
                 poly_options,
+                agn_temp_options,
                 opt_feii_options,
                 uv_iron_options,
                 balmer_options,
                 outflow_test_options,
                 host_template,
+                agn_template,
                 opt_feii_templates,
                 uv_iron_template,
                 balmer_template,
@@ -8798,11 +8882,13 @@ def fit_model(params,
               host_options,
               power_options,
               poly_options,
+              agn_temp_options,
               opt_feii_options,
               uv_iron_options,
               balmer_options,
               outflow_test_options,
               host_template,
+              agn_template,
               opt_feii_templates,
               uv_iron_template,
               balmer_template,
@@ -8881,6 +8967,24 @@ def fit_model(params,
         host_model = host_model * mpoly
         #
 
+    ########################################################################################################
+    
+    ############################# AGN Template Component ###################################################
+    if (comp_options["fit_agn"]==True) & (agn_template is not None):
+        
+        # unpack the agn template
+        agn_temp_wav, agn_temp_flux = agn_template
+        
+        # interpolate using lambda of the galaxy
+        agn_temp_function = interp1d(agn_temp_wav, agn_temp_flux, fill_value="extrapolate")
+        
+        agn = agn_temp_function(lam_gal)
+        
+        agn = agn * p['AGN_TEMP_AMP']
+        
+        host_model = (host_model) - (agn)
+        comp_dict['AGN_TEMPLATE'] = agn
+         
     ########################################################################################################
 
     ############################# Optical FeII Component ###################################################
@@ -9088,6 +9192,8 @@ def fit_model(params,
         comp_dict['HOST_GALAXY'] = host_galaxy
 
      ########################################################################################################
+     
+    
 
     # The final model
     gmodel = np.sum((comp_dict[d] for d in comp_dict),axis=0)
@@ -9385,6 +9491,29 @@ def generate_host_template(lam_gal,host_options,disp_res,fit_mask,velscale,verbo
 
 ##################################################################################
 
+#### AGN Template #########################################################
+def generate_agn_template(lam_gal, agn_temp_options, fit_mask):
+    """
+    Call upon a template of the AGN emission (Broad emission, FeII, power law)
+    created from a previous run of BADASS
+    """
+    
+    data_dir = BADASS_DIR.joinpath("badass_data","agn_templates") 
+    
+    # open the text file corresponding to the galaxy
+    galaxy = agn_temp_options['galaxy']
+    template_path = data_dir.joinpath("%s.txt" % galaxy)
+    
+    agn = np.genfromtxt(template_path)
+    
+    # now use lam gal to get the template wavelength and flux
+    agn_temp_wav  = agn[:, 0]
+    agn_temp_flux = agn[:, 1]
+    
+    agn_template = (agn_temp_wav, agn_temp_flux)
+    
+    return agn_template
+##################################################################################
 
 #### Optical FeII Templates ######################################################
 
@@ -9478,7 +9607,8 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
 
     elif (opt_feii_options['opt_template']['type']=='P22'):
 		# open daesong's iron template
-        p22_temp = np.genfromtxt('badass_data_files/feii_templates/park_2022/tab1.txt')
+        data_dir = BADASS_DIR.joinpath("badass_data", "feii_templates", "park_2022")
+        p22_temp = np.genfromtxt( str(data_dir.joinpath("tab1.txt")) )
         p22_wav  = p22_temp[:, 0]
         p22_flux = p22_temp[:, 1]/np.max(p22_temp[:, 1]) # NORMALIZE, even though the maximum is already at 0.7 ish
 
@@ -9525,7 +9655,7 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
         
             # We return a tuple consisting of the FFT of the broad and narrow templates, npad, and vsyst, 
             # which are needed for the convolution.
-            opt_feii_templates =(br_opt_feii_fft, na_opt_feii_fft, npad, vsyst)
+            opt_feii_templates =(p22_opt_feii_fft, npad, vsyst)
 
         return opt_feii_templates 
 
@@ -10184,7 +10314,8 @@ def simple_power_law(x,amp,alpha):
 
     # RR - since I am working with nearby seyferts, set the pivot wavelength to 5100 A 
     C = amp * (x/5100)**alpha
-    return 
+
+    return C 
 
 ##################################################################################
 
@@ -12240,11 +12371,13 @@ def plot_best_model(param_dict,
                     host_options,
                     power_options,
                     poly_options,
+                    agn_temp_options,
                     opt_feii_options,
                     uv_iron_options,
                     balmer_options,
                     outflow_test_options,
                     host_template,
+                    agn_template,
                     opt_feii_templates,
                     uv_iron_template,
                     balmer_template,
@@ -12256,7 +12389,8 @@ def plot_best_model(param_dict,
                     velscale,
                     flux_norm,
                     fit_norm,
-                    run_dir):
+                    run_dir
+                    ):
     """
     Plots the best fig model and outputs the components to a FITS file for reproduction.
     """
@@ -12303,11 +12437,13 @@ def plot_best_model(param_dict,
                           host_options,
                           power_options,
                           poly_options,
+                          agn_temp_options,
                           opt_feii_options,
                           uv_iron_options,
                           balmer_options,
                           outflow_test_options,
                           host_template,
+                          agn_template,
                           opt_feii_templates,
                           uv_iron_template,
                           balmer_template,
@@ -12351,10 +12487,16 @@ def plot_best_model(param_dict,
             ax1.plot(comp_dict['WAVE'], comp_dict['APOLY'], color='xkcd:bright purple' , linewidth=0.5, linestyle='-', label='%s-order Add. Poly.' % (poly_label("apoly")))
         elif (key=='MPOLY'):
             ax1.plot(comp_dict['WAVE'], comp_dict['MPOLY'], color='xkcd:lavender' , linewidth=0.5, linestyle='-', label='%s-order Mult. Poly.' % (poly_label("mpoly")))
+            
+        elif (key=='AGN_TEMPLATE'):
+            ax1.plot(comp_dict['WAVE'], comp_dict['AGN_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='AGN')
 
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax1.plot(comp_dict['WAVE'], comp_dict['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict['WAVE'], comp_dict['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+            
+        elif (key=='OPT_FEII_TEMPLATE'):
+            ax1.plot(comp_dict['WAVE'], comp_dict['OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
@@ -12748,7 +12890,11 @@ def plotly_best_fit(objname,line_list,fit_mask,run_dir):
         if comp=="BALMER_CONT":
             tracename="Balmer cont."
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["BALMER_CONT"], mode="lines", line=go.scatter.Line(color="lime", width=1, dash="dash"), name=tracename, legendrank=6, showlegend=True), row=1, col=1)
-        # FeII componentes
+        # AGN Model
+        if comp=='AGN_TEMPLATE':
+            tracename='AGN'
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["AGN_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
+        # FeII components
         if comp=="UV_IRON_TEMPLATE":
             tracename="UV Iron"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["UV_IRON_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#AB63FA", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
@@ -12882,6 +13028,7 @@ def dump_options(fit_options,
             host_options,
             power_options,
             poly_options,
+            agn_temp_options,
             opt_feii_options,
             uv_iron_options,
             balmer_options,
@@ -12910,6 +13057,8 @@ def dump_options(fit_options,
             f.write("\npower_options = %s" % power_options)
             f.write("\n#")
             f.write("\npoly_options = %s" % poly_options)
+            f.write("\n#")
+            f.write("\nagn_temp_options = %s" % agn_temp_options)
             f.write("\n#")
             f.write("\nopt_feii_options = %s" % opt_feii_options)
             f.write("\n#")
@@ -13017,7 +13166,7 @@ def write_log(output_val,output_type,run_dir):
         return None
 
     if (output_type=='fit_information'):
-        fit_options,mcmc_options,comp_options,pca_options,losvd_options,host_options,power_options,poly_options,opt_feii_options,uv_iron_options,balmer_options,\
+        fit_options,mcmc_options,comp_options,pca_options,losvd_options,host_options,power_options,poly_options,agn_temp_options,opt_feii_options,uv_iron_options,balmer_options,\
         plot_options,output_options = output_val
         with log_file_path.open(mode='a') as logfile:
             logfile.write('\n')
@@ -13056,6 +13205,7 @@ def write_log(output_val,output_type,run_dir):
                 logfile.write('\n')
             # Fit Component options
             logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   comp_options:','',''))
+            logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('fit_agn',':',str(comp_options['fit_agn']) ))             
             logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('fit_opt_feii',':',str(comp_options['fit_opt_feii']) )) 
             logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('fit_uv_iron',':',str(comp_options['fit_uv_iron']) )) 
             logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('fit_balmer',':',str(comp_options['fit_balmer']) )) 
@@ -13108,6 +13258,14 @@ def write_log(output_val,output_type,run_dir):
                 logfile.write('\n')
             elif comp_options["fit_poly"]==False:
                 logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   poly_options:','',''))
+                logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('','','Polynomial continuum component is turned off.' )) 
+                logfile.write('\n')
+            if comp_options['fit_agn']==True:
+                logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   agn_temp_options:','',''))
+                logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('galaxy',':',str(agn_temp_options['galaxy']) ))
+                logfile.write('\n')
+            elif comp_options['fit_agn']==False:
+                logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   agn_temp_options:','',''))
                 logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('','','Polynomial continuum component is turned off.' )) 
                 logfile.write('\n')
             # Optical FeII fitting options
