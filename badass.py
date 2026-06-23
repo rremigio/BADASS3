@@ -24,7 +24,7 @@ from scipy.interpolate import griddata, interp1d
 from scipy.stats import f, chisquare
 from scipy import stats
 import scipy
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from astropy.io import fits
 import glob
 import time
@@ -36,7 +36,7 @@ import sys
 from astropy.stats import mad_std
 from scipy.special import wofz
 import emcee
-from astroquery.irsa_dust import IrsaDust
+from astroquery.ipac.irsa.irsa_dust import IrsaDust
 import astropy.units as u
 from astropy import coordinates
 from astropy.cosmology import FlatLambdaCDM
@@ -6717,7 +6717,7 @@ def calc_max_like_flux(comp_dict,flux_norm,fit_norm, z):
     for key in comp_dict: 
         if key not in ['DATA', 'WAVE', 'MODEL', 'NOISE', 'RESID', "HOST_GALAXY", "POWER", "BALMER_CONT", "APOLY", "MPOLY"]:
             # Compute flux
-            f = np.trapz(comp_dict[key],comp_dict["WAVE"])
+            f = np.trapezoid(comp_dict[key],comp_dict["WAVE"])
             f *= (1.0+z) # Correct for redshift (integrate over observed wavelength, not rest)
             if f>=0:
                 flux = np.log10(flux_norm*fit_norm*(f))
@@ -6777,7 +6777,7 @@ def calc_max_like_eqwidth(comp_dict, line_list, velscale, z):
         for c in spec_comps:
             if 1:#c in lines: # component is a line
                 # print(c,comp_dict[c],cont)
-                eqwidth = np.trapz(comp_dict[c]/cont,comp_dict["WAVE"])
+                eqwidth = np.trapezoid(comp_dict[c]/cont,comp_dict["WAVE"])
                 eqwidth *= (1.0+z) # correct for redshift (integrate over observed wavlength, not rest)
             #
                 if ~np.isfinite(eqwidth):
@@ -6904,9 +6904,9 @@ def calc_max_like_dispersions(lam_gal, comp_dict, line_list, combined_line_list,
             # Normalized line profile
             norm_profile = full_profile/np.sum(full_profile)
             # Calculate integrated velocity in pixels units
-            v_int = np.trapz(vel*norm_profile,vel)/simps(norm_profile,vel)
+            v_int = np.trapezoid(vel*norm_profile,vel)/simpson(norm_profile,x=vel)
             # Calculate integrated dispersion and correct for instrumental dispersion
-            d_int = np.sqrt(np.trapz(vel**2*norm_profile,vel)/np.trapz(norm_profile,vel) - (v_int**2))
+            d_int = np.sqrt(np.trapezoid(vel**2*norm_profile,vel)/np.trapezoid(norm_profile,vel) - (v_int**2))
             # d_int = np.sqrt(d_int**2 - (line_list[line]["disp_res_kms"])**2)
             # 
             if ~np.isfinite(d_int): d_int = 0.0
@@ -9108,11 +9108,11 @@ def calc_mcmc_blob(p, lam_gal, comp_dict, comp_options, line_list, combined_line
     fit_quality   = {}
     #
     for key in spec_comps:
-        flux = np.abs(np.trapz(comp_dict[key],lam_gal))
+        flux = np.abs(np.trapezoid(comp_dict[key],lam_gal))
         # add key/value pair to dictionary
         fluxes[key+"_FLUX"] = flux
         #
-        eqwidth = np.trapz(comp_dict[key]/total_cont,lam_gal)
+        eqwidth = np.trapezoid(comp_dict[key]/total_cont,lam_gal)
         if ~np.isfinite(eqwidth):
             eqwidth=0.0
         # Add to eqwidth_dict
@@ -9145,9 +9145,9 @@ def calc_mcmc_blob(p, lam_gal, comp_dict, comp_options, line_list, combined_line
             # Normalized line profile
             norm_profile = full_profile/np.sum(full_profile)
             # Calculate integrated velocity in pixels units
-            v_int = np.trapz(vel*norm_profile,vel)/np.trapz(norm_profile,vel)
+            v_int = np.trapezoid(vel*norm_profile,vel)/np.trapezoid(norm_profile,vel)
             # Calculate integrated dispersion and correct for instrumental dispersion
-            d_int = np.sqrt(np.trapz(vel**2*norm_profile,vel)/np.trapz(norm_profile,vel) - (v_int**2))
+            d_int = np.sqrt(np.trapezoid(vel**2*norm_profile,vel)/np.trapezoid(norm_profile,vel) - (v_int**2))
             # d_int = np.sqrt(d_int**2 - (line_list[key]["disp_res_kms"])**2)
             if ~np.isfinite(d_int): d_int = 0.0
             if ~np.isfinite(v_int): v_int = 0.0
@@ -11017,7 +11017,7 @@ def gauss_kde(xs,data,h):
         return (1./np.sqrt(2.*np.pi)) * np.exp(-x**2/2)
 
     kde = np.sum((1./h) * gauss_kernel((xs.reshape(len(xs),1)-data)/h), axis=1)
-    kde = kde/np.trapz(kde,xs)# normalize
+    kde = kde/np.trapezoid(kde,xs)# normalize
     return kde
 
 def kde_bandwidth(data):
