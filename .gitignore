@@ -1,6 +1,7 @@
 **/.DS_Store
 **/__pycache__
 **.pyc
+**/.vscode
 example_notebooks/BADASS3_ifu_KCWI.ipynb
 neuralnet_training_data/
 example_spectra/5-test/
