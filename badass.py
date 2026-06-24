@@ -1634,7 +1634,7 @@ def setup_dirs(work_dir,verbose=True):
         if os.path.exists(prev_fold+'MCMC_chain.csv')==True:
             prev_dir = prev_fold
         else:
-            prev_dir = prev_fold
+            prev_dir = None
         if verbose:
             print(' Storing MCMC_output in %s' % run_dir)
 
@@ -1690,12 +1690,17 @@ def determine_fit_reg_sdss(fits_file, run_dir, fit_reg, good_thresh, fit_losvd, 
             # elif (auto_upp is None):
                 # new_fit_reg = None
                 # return None, None
-        elif (fit_losvd==False):
-            new_fit_reg = (np.floor(first_good),np.ceil(last_good))
+        # elif (fit_losvd==False):
+        #    new_fit_reg = (np.floor(first_good),np.ceil(last_good))
+        else: 
+            # fit_losvd is False OR fit_losvd is True and the range is
+            # within the limits of the template
+            new_fit_reg = (np.floor(first_good), np.ceil(last_good))
 
     elif isinstance(fit_reg,(tuple,list)):
         # Check to see if tuple/list makes sense
-        if ((fit_reg[0]>fit_reg[1]) | (fit_reg[1]<fit_reg[0])): # if boundaries overlap
+        #if ((fit_reg[0]>fit_reg[1]) | (fit_reg[1]<fit_reg[0])): # if boundaries overlap
+        if (fit_reg[0] >= fit_reg[1]): # claude fix
             if verbose:
                 print('\n Fitting boundaries overlap! \n')
             new_fit_reg = None
@@ -1771,8 +1776,19 @@ def determine_fit_reg_user(wave, z, run_dir, fit_reg, good_thresh, fit_losvd, lo
     # Limits of the stellar template wavelength range
     # The stellar templates packaged with BADASS are from the Indo-US Coude Feed Stellar Template Library
     # with the below wavelength ranges.
-    min_losvd = 3460
-    max_losvd = 9464
+    #min_losvd = 3460
+    #max_losvd = 9464
+
+    # replicate the behavior for the SDSS version
+    # If anything, update this one with the new stellar libraries
+    # like x-shooter
+    if (losvd_options["library"]=="IndoUS"):
+        min_losvd, max_losvd = 3460, 9464
+    if (losvd_options["library"]=="Vazdekis2010"):
+        min_losvd, max_losvd = 3540.5, 7409.6
+    if (losvd_options["library"]=="eMILES"):
+        min_losvd, max_losvd = 1680.2, 49999.4    
+
     lam_gal   = wave/(1+z)		
     # Edges of wavelength vector
     first_good = lam_gal[0]
@@ -1794,12 +1810,17 @@ def determine_fit_reg_user(wave, z, run_dir, fit_reg, good_thresh, fit_losvd, lo
             # elif (auto_upp is None):
                 # new_fit_reg = None
                 # return None, None
-        elif (fit_losvd==False):
-            new_fit_reg = (np.floor(first_good),np.ceil(last_good))
+        # elif (fit_losvd==False):
+        #     new_fit_reg = (np.floor(first_good),np.ceil(last_good))
+        else:
+            # fit_losvd is True but the range is within the template limits
+            # or fit_losvd is False
+            new_fit_reg = (np.floor(first_good), np.ceil(last_good))
 
     elif isinstance(fit_reg,(tuple,list)):
         # Check to see if tuple/list makes sense
-        if ((fit_reg[0]>fit_reg[1]) | (fit_reg[1]<fit_reg[0])): # if boundaries overlap
+        # if ((fit_reg[0]>fit_reg[1]) | (fit_reg[1]<fit_reg[0])): # if boundaries overlap
+        if (fit_reg[0] >= fit_reg[1]): # claude fix
             if verbose:
                 print('\n Fitting boundaries overlap! \n')
             new_fit_reg = None
@@ -8041,7 +8062,7 @@ def gh_penalty_ftn(line,params,param_names):
     if len(gh_pnames)==0:
         return 0 # no penalty
     elif len(gh_pnames)>0:
-        D = np.sum(p[i]**2 for i in gh_pnames)
+        D = np.sum([p[i]**2 for i in gh_pnames])
         penalty = D
     #
     return penalty
@@ -8123,7 +8144,7 @@ def lnlike(params,
 
         if fit_stat=="ML":
             # Calculate log-likelihood
-            l = -0.5*(galaxy[fit_mask]-model[fit_mask])**2/(noise[fit_mask])**2 + np.log(2*np.pi*(noise[fit_mask])**2)
+            l = -0.5*(galaxy[fit_mask]-model[fit_mask])**2/(noise[fit_mask])**2 + -0.5*np.log(2*np.pi*(noise[fit_mask])**2)
             l = np.sum(l,axis=0)
         elif fit_stat=="OLS":
             # Since emcee looks for the maximum, but Least Squares requires a minimum
@@ -8173,7 +8194,7 @@ def lnlike(params,
 
         if fit_stat=="ML":
             # Calculate log-likelihood
-            l = -0.5*(galaxy[fit_mask]-model[fit_mask])**2/(noise[fit_mask])**2 + np.log(2*np.pi*(noise[fit_mask])**2)
+            l = -0.5*(galaxy[fit_mask]-model[fit_mask])**2/(noise[fit_mask])**2 + -0.5*np.log(2*np.pi*(noise[fit_mask])**2)
             l = np.sum(l,axis=0)
             # print("Log-Likelihood = %0.4f" % (l))
         elif fit_stat=="OLS":
@@ -8711,7 +8732,7 @@ def calculate_w80(lam_gal, full_profile, disp_res, velscale, center ):
     # Calculate the normalized CDF of the line profile
     cdf = np.cumsum(full_profile/np.sum(full_profile))
     v   = (lam_gal-center)/center*c
-    w80 = np.interp(0.91,cdf,v) - np.interp(0.10,cdf,v)
+    w80 = np.interp(0.90,cdf,v) - np.interp(0.10,cdf,v)
     # Correct for intrinsic W80.  
     # The formula for a Gaussian W80 = 1.09*FWHM = 2.567*disp_res (Harrison et al. 2014; Manzano-King et al. 2019)
     # w80 = np.sqrt((w80)**2-(2.567*disp_res)**2)
@@ -9023,7 +9044,7 @@ def fit_model(params,
      ########################################################################################################
 
     # The final model
-    gmodel = np.sum((comp_dict[d] for d in comp_dict),axis=0)
+    gmodel = np.sum([comp_dict[d] for d in comp_dict],axis=0)
 
     #########################################################################################################
 
