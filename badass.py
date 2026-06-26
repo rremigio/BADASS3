@@ -723,6 +723,16 @@ def run_single_thread(fits_file,
         comp_options["fit_opt_feii"]=False
         opt_feii_templates = None
         write_log((),'update_opt_feii',run_dir)
+    # Park et al. (2022)
+    elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="P22") & (lam_gal[-1]>=4000.0) & (lam_gal[0]<=5600.0):
+        opt_feii_templates = initialize_opt_feii(lam_gal,opt_feii_options,disp_res,fit_mask,velscale)
+    elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="P22") & ((lam_gal[-1]<4000.0) | (lam_gal[0]>5600.0)):
+        if verbose:
+            print('\n - Optical FeII template disabled because template is outside of fitting region.')
+            fit_opt_feii = False
+            comp_options["fit_opt_feii"]=False
+            opt_feii_templates = None
+            write_log((),'update_opt_feii',run_dir)
     elif (fit_opt_feii==False):
         opt_feii_templates = None
         
@@ -3163,7 +3173,27 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
             par_input['OPT_FEII_TEMP'] = ({'init'  :10000.0,
                                            'plim'  :(2000.0,25000.0),
                                            })
-
+    elif (fit_opt_feii==True) & (opt_feii_options['opt_template']['type']=='P22'):
+        if verbose:
+            print('\t- Fitting optical FeII template from Park et al. (2022)')
+        # Amplitude
+        if (opt_feii_options['opt_amp_const']['bool']==False):
+            if verbose: 
+                print('     * varying optical FeII amplitude')
+            par_input['P22_OPT_FEII_AMP'] = ({'init':0.1*median_flux,
+                                          'plim':(0,max_flux)})
+        # Dispersion
+        if (opt_feii_options['opt_disp_const']['bool']==False):
+            if verbose: 
+                print('     * varying optical FeII dispersion')
+            par_input['P22_OPT_FEII_DISP'] = ({'init':500.0,
+                                           'plim':(0.1,5000.0)})
+        # Velocity offset
+        if (opt_feii_options['opt_voff_const']['bool']==False):
+            if verbose: 
+                print('     * varying optical FeII voff')
+            par_input['P22_OPT_FEII_VOFF'] = ({'init':0.0,
+                                           'plim':(-2000.0,2000.0)})
     ##############################################################################
 
     #### UV Iron Template ########################################################
@@ -6214,6 +6244,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+        elif (key == 'P22_OPT_FEII_TEMPLATE'):
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -6319,6 +6352,9 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+
+        elif (key == 'P22_OPT_FEII_TEMPLATE'):
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
@@ -6486,6 +6522,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+        elif (key == 'P22_OPT_FEII_TEMPLATE'):
+            ax1.plot(comp_dict_A['WAVE'], comp_dict_A['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -6590,6 +6629,9 @@ def config_test_plot(n,ncomp_A,ncomp_B,
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+
+        elif (key == 'P22_OPT_FEII_TEMPLATE'):
+            ax3.plot(comp_dict_B['WAVE'], comp_dict_B['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
@@ -7946,6 +7988,9 @@ def max_like_plot(lam_gal,comp_dict,line_list,params,param_names,fit_mask,fit_no
                 ax1.plot(comp_dict['WAVE'], comp_dict['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
                 ax1.plot(comp_dict['WAVE'], comp_dict['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
 
+            elif (key == 'P22_OPT_FEII_TEMPLATE'):
+                ax1.plot(comp_dict['WAVE'], comp_dict['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
+
             elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
                 if key=='F_OPT_FEII_TEMPLATE':
                     ax1.plot(comp_dict['WAVE'], comp_dict['F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
@@ -8866,6 +8911,11 @@ def fit_model(params,
             comp_dict['G_OPT_FEII_TEMPLATE'] = g_template
             comp_dict['Z_OPT_FEII_TEMPLATE'] = z_template
 
+        elif (opt_feii_options['opt_template']['type']=='P22'):
+            opt_feii_template = P22_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale)
+            host_model = (host_model) - (opt_feii_template)
+            comp_dict['P22_OPT_FEII_TEMPLATE'] = opt_feii_template
+
     ########################################################################################################
 
 
@@ -9360,7 +9410,12 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
              total of 7 free parameters.  This template is only recommended 
              for objects with very strong FeII emission, for which the LOSVD
              cannot be determined at all.
-             """
+             
+
+    'P22'  : Park et al. (2022) template based on Mrk 493 STIS spectra. Acts
+             as essentially a one-component version of the VC04 template with
+             only up to 3 free parameters.
+    """
     if (opt_feii_options['opt_template']['type']=='VC04'):
         # Load the data into Pandas DataFrames
         data_dir = BADASS_DIR.joinpath("badass_data","feii_templates","veron-cetty_2004")
@@ -9546,6 +9601,53 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
         # Return a list of arrays which will be unpacked during the fitting process
         return opt_feii_templates
 
+    elif (opt_feii_options['opt_template']['type']=='P22'):
+        # Load Park et al. (2022) single FeII template
+        data_dir = BADASS_DIR.joinpath("badass_data","feii_templates","park_2022")
+        # If you pre-converted to CSV (recommended, see doc §0):
+        # df = pd.read_csv(str(data_dir.joinpath("P22_feii_template.csv")))
+        # --- OR parse tab1.txt directly: ---
+        df = pd.read_csv(str(data_dir.joinpath("tab1.txt")), comment="#",
+                          sep=r"\s+", names=["angstrom","flux","err"])
+
+        # Build a uniform-resolution grid spanning the fitting region (+pad)
+        dlam_feii = df["angstrom"].to_numpy()[1]-df["angstrom"].to_numpy()[0]  # = 2.0 A
+        npad = 100  # angstroms
+        lam_feii = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad, dlam_feii)
+        interp_ftn = interp1d(df["angstrom"].to_numpy(), df["flux"].to_numpy(),
+                          kind='linear', bounds_error=False, fill_value=(0.0,0.0))
+        spec_feii = interp_ftn(lam_feii)
+
+        # Convolve to instrumental resolution of the data
+        fwhm_feii = 15.0  # NOTE: set to the Park template's native FWHM resolution (A).
+        disp_feii = fwhm_feii/2.3548
+        disp_res_interp = np.interp(lam_feii, lam_gal, disp_res)
+        disp_diff = np.sqrt((disp_res_interp**2 - disp_feii**2).clip(0))
+        sigma = disp_diff/dlam_feii
+        spec_feii = gaussian_filter1d(spec_feii, sigma)
+
+        # log-rebin onto the galaxy velocity scale
+        lamRange_feii = [np.min(lam_feii), np.max(lam_feii)]
+        spec_feii_new, loglam_feii, velscale_feii = log_rebin(lamRange_feii, spec_feii, velscale=velscale)
+
+        # Pre-compute FFT
+        opt_feii_fft, npad = template_rfft(spec_feii_new)
+        c = 299792.458
+        vsyst = np.log(lam_feii[0]/lam_gal[0])*c
+
+        # If disp AND voff are both held constant, pre-convolve once
+        if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+            disp = opt_feii_options["opt_disp_const"]["opt_feii_val"]
+            voff = opt_feii_options["opt_voff_const"]["opt_feii_val"]
+            conv_temp = convolve_gauss_hermite(opt_feii_fft, npad, float(velscale),
+                                           [voff, disp], lam_gal.shape[0],
+                                           velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+            opt_feii_templates = (conv_temp,)
+        else:
+            opt_feii_templates = (opt_feii_fft, npad, vsyst)
+
+        return opt_feii_templates
+
 #### Optical FeII Template #########################################################
 
 def VC04_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
@@ -9614,6 +9716,40 @@ def VC04_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, vel
         na_opt_feii_template[(lam_gal < 3400) & (lam_gal > 7200)] = 0
 
     return br_opt_feii_template, na_opt_feii_template
+
+def P22_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
+
+    # Amplitude
+    if (opt_feii_options['opt_amp_const']['bool']==False):
+        opt_feii_amp = p['P22_OPT_FEII_AMP']
+    else:
+        opt_feii_amp = opt_feii_options['opt_amp_const']['opt_feii_val']
+    # Dispersion
+    if (opt_feii_options['opt_disp_const']['bool']==False):
+        opt_feii_disp = p['P22_OPT_FEII_DISP']
+    else:
+        opt_feii_disp = opt_feii_options['opt_disp_const']['opt_feii_val']
+    if opt_feii_disp <= 0.01: opt_feii_disp = 0.01
+    # Voff
+    if (opt_feii_options['opt_voff_const']['bool']==False):
+        opt_feii_voff = p['P22_OPT_FEII_VOFF']
+    else:
+        opt_feii_voff = opt_feii_options['opt_voff_const']['opt_feii_val']
+
+    if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+        (conv_temp,) = opt_feii_templates
+        opt_feii_template = (conv_temp * opt_feii_amp).reshape(-1)
+    else:
+        opt_feii_fft, npad, vsyst = opt_feii_templates
+        conv_temp = convolve_gauss_hermite(opt_feii_fft, npad, float(velscale),
+                                           [opt_feii_voff, opt_feii_disp], lam_gal.shape[0],
+                                           velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+        opt_feii_template = (opt_feii_amp * conv_temp).reshape(-1)
+
+    # Zero out anywhere outside the template coverage (4000-5600 A)
+    opt_feii_template[(lam_gal < 4000) | (lam_gal > 5600)] = 0
+
+    return opt_feii_template
 
 ####################################################################################
 
@@ -12219,6 +12355,9 @@ def plot_best_model(param_dict,
         elif (key in ['NA_OPT_FEII_TEMPLATE','BR_OPT_FEII_TEMPLATE']):
             ax1.plot(comp_dict['WAVE'], comp_dict['NA_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='Narrow FeII')
             ax1.plot(comp_dict['WAVE'], comp_dict['BR_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='Broad FeII')
+
+        elif (key == 'P22_OPT_FEII_TEMPLATE'):
+            ax1.plot(comp_dict['WAVE'], comp_dict['P22_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-', label='FeII')
 
         elif (key in ['F_OPT_FEII_TEMPLATE','S_OPT_FEII_TEMPLATE','G_OPT_FEII_TEMPLATE','Z_OPT_FEII_TEMPLATE']):
             if key=='F_OPT_FEII_TEMPLATE':
