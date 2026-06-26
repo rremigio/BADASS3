@@ -1306,9 +1306,9 @@ def check_opt_feii_options(input,verbose=False):
 		# opt_template
 		opt_template_dict = {
 		"type" : {"conds":[	lambda x: isinstance(x,(str)),
-							lambda x: x in ["VC04","K10"]],
+							lambda x: x in ["VC04","K10","P22"]],
 					"default": "VC04",
-					"error_message": "\n Optical FeII template type (opt_template type) must be a string and either 'VC04' or 'K10'.\n",}
+					"error_message": "\n Optical FeII template type (opt_template type) must be a string and either 'VC04', 'K10', or 'P22'.\n",}
 			}
 		output["opt_template"] = check_dict(output["opt_template"],opt_template_dict)
 		# opt_amp_const
@@ -1413,9 +1413,9 @@ def check_opt_feii_options(input,verbose=False):
 		# opt_template
 		opt_template_dict = {
 		"type" : {"conds":[	lambda x: isinstance(x,(str)),
-							lambda x: x in ["VC04","K10"]],
+							lambda x: x in ["VC04","K10","P22"]],
 					"default": "K10",
-					"error_message": "\n Optical FeII template type (opt_template type) must be a string and either 'VC04' or 'K10'.\n",}
+					"error_message": "\n Optical FeII template type (opt_template type) must be a string and either 'VC04', 'K10', or 'P22'.\n",}
 			}
 		output["opt_template"] = check_dict(output["opt_template"],opt_template_dict)
 		# opt_amp_const
@@ -1485,7 +1485,60 @@ def check_opt_feii_options(input,verbose=False):
 
 		return output
 
-
+	if input["opt_template"]["type"]=="P22":
+		keyword_dict={
+    		"opt_template"  : {"conds":[lambda x: isinstance(x,(dict))],
+                       "default": {"type":"P22"},
+                       "error_message": "\n opt_template must be a dictionary.\n"},
+    		"opt_amp_const" : {"conds":[lambda x: isinstance(x,(dict))],
+                       "default": {"bool":False,"opt_feii_val":1.0},
+                       "error_message": "\n opt_amp_const must be a dictionary.\n"},
+    		"opt_disp_const": {"conds":[lambda x: isinstance(x,(dict))],
+                       "default": {"bool":False,"opt_feii_val":1500.0},
+                       "error_message": "\n opt_disp_const must be a dictionary.\n"},
+    		"opt_voff_const": {"conds":[lambda x: isinstance(x,(dict))],
+                       "default": {"bool":False,"opt_feii_val":0.0},
+                       "error_message": "\n opt_voff_const must be a dictionary.\n"},
+    		}
+			
+		output = check_dict(input,keyword_dict)
+		
+		opt_template_dict = {
+    	"type" : {"conds":[lambda x: isinstance(x,(str)),
+                       lambda x: x in ["VC04","K10","P22"]],
+              "default": "P22",
+              "error_message": "\n opt_template type must be 'VC04', 'K10', or 'P22'.\n"}
+    	}
+		output["opt_template"] = check_dict(output["opt_template"],opt_template_dict)
+		
+		opt_amp_const_dict = {
+    	"bool" : {"conds":[lambda x: isinstance(x,(bool))], "default": False,
+              "error_message": "\n opt_amp_const bool must be True or False.\n"},
+    	"opt_feii_val" : {"conds":[lambda x: isinstance(x,(int,float)), lambda x: x>0],
+              "default": 1.0,
+              "error_message": "\n opt_amp_const opt_feii_val must be a number.\n"},
+    	}
+		output["opt_amp_const"] = check_dict(output["opt_amp_const"],opt_amp_const_dict)
+		
+		opt_disp_const_dict = {
+    	"bool" : {"conds":[lambda x: isinstance(x,(bool))], "default": False,
+              "error_message": "\n opt_disp_const bool must be True or False.\n"},
+    	"opt_feii_val" : {"conds":[lambda x: isinstance(x,(int,float)), lambda x: x>0],
+              "default": 1500.0,
+              "error_message": "\n opt_disp_const opt_feii_val must be a number.\n"},
+    	}
+		output["opt_disp_const"] = check_dict(output["opt_disp_const"],opt_disp_const_dict)
+		
+		opt_voff_const_dict = {
+    	"bool" : {"conds":[lambda x: isinstance(x,(bool))], "default": False,
+              "error_message": "\n opt_voff_const bool must be True or False.\n"},
+    	"opt_feii_val" : {"conds":[lambda x: isinstance(x,(int,float))],
+              "default": 0.0,
+              "error_message": "\n opt_voff_const opt_feii_val must be a number.\n"},
+    	}
+		output["opt_voff_const"] = check_dict(output["opt_voff_const"],opt_voff_const_dict)
+		
+		return output
 
 ####################################################################################
 
