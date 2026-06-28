@@ -1033,10 +1033,10 @@ def check_losvd_options(input,verbose=False):
 	keyword_dict={
 	"library" 			: {"conds":[
 								lambda x: isinstance(x,(str)),
-								lambda x: x in ["IndoUS","Vazdekis2010","eMILES"]
+								lambda x: x in ["IndoUS","Vazdekis2010","eMILES","XSL"]
 								],
 		  				"default": "IndoUS",
-		  				"error_message": "\n Stellar template library must be a string.  Available options: 'IndoUS', 'Vazdekis2010', 'eMILES'. \n"},
+		  				"error_message": "\n Stellar template library must be a string.  Available options: 'IndoUS', 'Vazdekis2010', 'eMILES', 'XSL'. \n"},
 	"vel_const" 	: {"conds":[
 								lambda x: isinstance(x,(dict))
 								],

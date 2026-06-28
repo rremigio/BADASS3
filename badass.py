@@ -1669,6 +1669,8 @@ def determine_fit_reg_sdss(fits_file, run_dir, fit_reg, good_thresh, fit_losvd, 
         min_losvd, max_losvd = 3540.5, 7409.6
     if (losvd_options["library"]=="eMILES"):
         min_losvd, max_losvd = 1680.2, 49999.4
+    if (losvd_options["library"]=="XSL"):
+        min_losvd, max_losvd = 3500, 24749.76958184
     # Open spectrum file
     hdu = fits.open(fits_file)
     specobj = hdu[2].data
@@ -1798,6 +1800,8 @@ def determine_fit_reg_user(wave, z, run_dir, fit_reg, good_thresh, fit_losvd, lo
         min_losvd, max_losvd = 3540.5, 7409.6
     if (losvd_options["library"]=="eMILES"):
         min_losvd, max_losvd = 1680.2, 49999.4    
+    if (losvd_options["library"]=="XSL"):
+        min_losvd, max_losvd = 3500, 24749.76958184
 
     lam_gal   = wave/(1+z)		
     # Edges of wavelength vector
@@ -2835,6 +2839,7 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
     This example is from Capellari's pPXF examples, the code 
     for which can be found here: https://www-astro.physics.ox.ac.uk/~mxc/.
     """
+
     # Stellar template directory
     data_dir = BADASS_DIR.joinpath("badass_data")
     if (losvd_options["library"]=="IndoUS"):
@@ -2849,6 +2854,9 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         temp_dir  = data_dir.joinpath("eMILES")
         fwhm_temp = 2.51 # eMILES spectra have a constant resolution FWHM of 2.51A (linear)
         disp_temp = fwhm_temp/2.3548
+    if (losvd_options["library"]=="XSL"):
+        temp_dir  = data_dir.joinpath("XSL_ssp")
+        # due to the nature of the XSL, the fwhm and disp need to be calculated per wavelength channel
 
     fit_min,fit_max = float(fit_reg[0]),float(fit_reg[1])
     #
@@ -2872,13 +2880,25 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
     h2 = hdu[0].header
     hdu.close()
 
-    lam_temp = np.array(h2['CRVAL1'] + h2['CDELT1']*np.arange(h2['NAXIS1']))
+    if (losvd_options["library"]=="XSL"):
+        # calculation as described on XSL website, further converted to angstroms
+        lam_temp = 10 * 10**( (np.arange(h2['NAXIS1'])+1 - h2['CRPIX1'])*h2['CDELT1'] + h2['CRVAL1']  )     
+    else:
+        # standard BADASS routine
+        lam_temp = np.array(h2['CRVAL1'] + h2['CDELT1']*np.arange(h2['NAXIS1']))
+    
     # By cropping the templates we save some fitting time
     mask_temp = ( (lam_temp > (fit_min-100.)) & (lam_temp < (fit_max+100.)) )
     ssp = ssp[mask_temp]
     lam_temp = lam_temp[mask_temp]
 
     lamRange_temp = [np.min(lam_temp), np.max(lam_temp)]
+
+    # again, for XSL, it seems we need to do something special here
+    if (losvd_options["library"]=="XSL"):
+        lam_lin = np.linspace(lam_temp[0], lam_temp[-1], lam_temp.size)
+    else:
+        pass
 
     sspNew = log_rebin(lamRange_temp, ssp, velscale=velscale)[0]
     templates = np.empty((sspNew.size, len(temp_list)))
@@ -2891,6 +2911,18 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
         disp_res_interp = np.interp(lam_temp, lam_gal, disp_res)
     elif isinstance(disp_res,(int,float)):
         disp_res_interp = np.full_like(lam_temp,disp_res)
+
+    # special portion for just XSL to get fwhm or disp at the wavelength
+    if (losvd_options["library"]=="XSL"):
+        sigma_temp_kms = np.full_like(lam_temp, 11.0) # set the resolution of the VIS band
+        sigma_temp_kms[lam_temp < 5560] = 13.0
+        sigma_temp_kms[lam_temp > 9940] = 16.0
+
+        c = 299792.458 # speed of light in km/s
+        disp_temp = (sigma_temp_kms / c) * lam_temp # disp temp for XSL
+        fwhm_temp = disp_temp * 2.3548
+    else:
+        pass
 
     # Convolve the whole Vazdekis library of spectral templates
     # with the quadratic difference between the SDSS and the
@@ -2905,13 +2937,21 @@ def prepare_stellar_templates(galaxy, lam_gal, fit_reg, velscale, disp_res, fit_
     # In principle it should never happen and a higher resolution template should be used.
     #
     disp_dif = np.sqrt((disp_res_interp**2 - disp_temp**2).clip(0))
-    sigma = disp_dif/h2['CDELT1'] # Sigma difference in pixels
+
+    if (losvd_options["library"]=="XSL"):
+        sigma = disp_dif/(lam_temp*np.log(10)*h2['CDELT1']) # take into account the weird header info
+    else:
+        sigma = disp_dif/h2['CDELT1'] # Sigma difference in pixels
 
     for j, fname in enumerate(temp_list):
         hdu = fits.open(fname)
         ssp = hdu[0].data
         ssp = ssp[mask_temp]
         ssp = gaussian_filter1d(ssp, sigma)  # perform convolution with variable sigma
+        
+        if (losvd_options["library"]=="XSL"):
+            ssp = np.interp(lam_lin, lam_temp, ssp) # linearize XSL so next log rebin works
+
         sspNew,loglam_temp,velscale_temp = log_rebin(lamRange_temp, ssp, velscale=velscale)#[0]
         templates[:, j] = sspNew/np.nanmedian(sspNew) # Normalizes templates
         hdu.close()
