@@ -7,6 +7,7 @@ if incorrect values are used.
 """
 import sys
 import glob
+import pathlib
 import numpy as np
 from astropy.io import fits
 from astroquery.irsa_dust import IrsaDust
@@ -488,6 +489,7 @@ def check_comp_options(input,verbose=False):
 			"fit_balmer"	   : True, # Balmer continuum (<4000 A)
 			"fit_losvd"		: False, # stellar LOSVD
 			"fit_host"		 : True, # host template
+			"fit_agn_temp"  : False, # AGN template
 			"fit_power"		: True, # AGN power-law
 			"fit_narrow"	   : False, # narrow lines
 			"fit_broad"		: False, # broad lines
@@ -529,6 +531,12 @@ def check_comp_options(input,verbose=False):
 				  "default": True,
 				  "error_message": "\n fit_host must be a bool.\n",
 				  },
+	"fit_agn_temp": {"conds": [
+								lambda x: isinstance(x,(bool))
+							],
+					"default": False,
+					"error_message": "\n fit_agn_temp must be a bool.\n,"
+					},
 	"fit_power" : {"conds":[
 							lambda x: isinstance(x,(bool))
 							],
@@ -583,6 +591,16 @@ def check_comp_options(input,verbose=False):
 			print("\n Warning: fit_losvd and fit_host both True.  fit_host will override fit_losvd and set fit_losvd=False.\n")
 		
 
+	# Do a similar thing with fit_agn_temp with fit_power, fit_opt_feii, fit_broad, and fit_uv iron
+	if output["fit_agn_temp"]==True:
+		conflicts = [k for k in ("fit_power", "fit_opt_feii", "fit_uv_iron", "fit_broad") if output.get(k)]
+		if conflicts:
+			raise ValueError(
+				"\n fit_agn_temp cannot be used together with %s. The AGN template "
+				"already includes the power law, broad lines, and FeII. \n"
+				% ", ".join(conflicts)
+			)
+		
 	return output
 
 ##################################################################################
@@ -968,6 +986,79 @@ def check_user_mask(input,verbose=False):
 		else:
 			output.append(con)
 
+	return output
+
+##################################################################################
+
+#### AGN template options ########################################################
+
+def check_agn_temp_options(input, verbose=False):
+	"""
+    Checks the agn_temp_options dictionary and ensures all keywords are valid.
+
+    agn_temp_options = {                              # docstring EXAMPLE only
+        "agn_template": {"type": "my_agn_template"}, # file stem in badass_data/agn_templates/
+        "amp_const":         {"bool": False, "val": 1.0}, # bool=True freezes amplitude at val
+    }
+	"""
+
+	if not input: # default when the user omits it
+		output = {
+			"agn_template": {"type": "ngc613"}, # placeholder galaxy
+			"amp_const": {"bool": False, "val": 1.0}
+		}
+		return output
+	
+	# now look at the inner dictionaries
+	keyword_dict = {
+		"agn_template": { 
+						"conds": [lambda x: isinstance(x,dict)],
+				    	"default": {"type": "ngc613"},
+					 	"error_message": "\n agn_template must be a dictionary.\n"
+						},
+		"amp_const":    { 
+						"conds": [lambda x: isinstance(x,dict)],
+						"default": {"bool": False, "val": 1.0},
+						"error_message": "\n amp_const must be a dictionary. \n"
+						},
+					}
+	
+	output = check_dict(input, keyword_dict)
+
+	# now look at the inner inner dictionaries
+	agn_template_dict = {
+		"type": {"conds": [lambda x: isinstance(x, str)],
+				 "default": "ngc613",
+		   		 "error_message": "\n agn_template type must be a string \n"
+				 },
+	}
+
+	output["agn_template"] = check_dict(output["agn_template"], agn_template_dict)
+
+	amp_const_dict = {
+		"bool": {"conds": [lambda x: isinstance(x, bool)],
+		   		 "default": False,
+		   		 "error_message": "\n amp_const bool must be True or False \n"
+				 },
+		"val": {"conds": [lambda x: isinstance(x, (int,float)), lambda x: x > 0],
+		  		"default": 1.0,
+		  		"error_message": "\n amp_const val must be a positive number. \n"
+				},
+	}
+
+	output["amp_const"] = check_dict(output["amp_const"], amp_const_dict)
+
+	# after verifying the dictionary, actually check and see if the file exists
+	template_name = output["agn_template"]["type"]
+	agn_temp_dir  = pathlib.Path(__file__).resolve().parent.parent.joinpath("badass_data","agn_templates")
+	template_path = agn_temp_dir.joinpath(template_name + ".txt")
+	if not template_path.exists():
+		available = sorted(p.stem for p in agn_temp_dir.glob("*.txt"))
+		raise ValueError(
+			"\n AGN template '%s' not found at %s. \n Available templates %s \n" 
+			% (template_name, template_path, available)
+		)
+	
 	return output
 
 ##################################################################################
