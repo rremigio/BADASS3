@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "badass3"
+version = "10.2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.6",
+    "scipy>=1.17.1",
+    "astropy>=7.2.0",
+    "astroquery>=0.4.11",
+    "astroML>=1.0.2.post1",
+    "matplotlib>=3.10.9",
+    "pandas>=3.0.3",
+    "emcee>=3.1.6",
+    "corner>=2.2.3",
+    "numexpr>=2.14.1",
+    "natsort>=8.4.0",
+    "prettytable>=3.17.0",
+    "psutil>=7.2.2",
+    "joblib>=1.5.3",
+    "plotly>=6.8.0",
+    "scikit-learn>=1.9.0",
+    "spectres>=2.2.2",
+    "vorbin>=3.2.1",
+    "tqdm>=4.68.3",
+]
+
+[tool.setuptools]
+py-modules = ["badass"]
+packages = ["badass_utils", "badass_tools"]

@@ -10729,8 +10729,8 @@ def log_rebin(lamRange, spec, oversample=1, velscale=None, flux=False):
     if velscale is None:					 # Velocity scale is set by user
         velscale = np.diff(logLim)/m*c	   # Only for output
     else:
-        logScale = velscale/c
-        m = int(np.diff(logLim)/logScale)	# Number of output pixels
+        logScale = np.asarray(velscale).item()/c
+        m = int( (np.diff(logLim)/logScale).item() )	# Number of output pixels
         logLim[1] = logLim[0] + m*logScale
 
     newBorders = np.exp(np.linspace(*logLim, num=m+1)) # Logarithmically
@@ -12948,6 +12948,9 @@ def plotly_best_fit(objname,line_list,fit_mask,run_dir):
         if comp=="BALMER_CONT":
             tracename="Balmer cont."
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["BALMER_CONT"], mode="lines", line=go.scatter.Line(color="lime", width=1, dash="dash"), name=tracename, legendrank=6, showlegend=True), row=1, col=1)
+        if comp=="AGN_TEMP":
+            tracename="AGN"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["AGN_TEMP"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=6, showlegend=True), row=1, col=1)
         # FeII componentes
         if comp=="UV_IRON_TEMPLATE":
             tracename="UV Iron"
@@ -12958,12 +12961,15 @@ def plotly_best_fit(objname,line_list,fit_mask,run_dir):
         if comp=="BR_OPT_FEII_TEMPLATE":
             tracename="Broad FeII"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["BR_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#FF7F0E", width=1), name=tracename, legendrank=8, showlegend=True), row=1, col=1)
+        if comp=='P22_OPT_FEII_TEMPLATE':
+            tracename="P22 FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["P22_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
         if comp=='F_OPT_FEII_TEMPLATE':
             tracename="F-transition FeII"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["F_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
         if comp=='S_OPT_FEII_TEMPLATE':
             tracename="S-transition FeII"
-            fig.add_trace(go.Scatter( x = tbdata["waVe"], y = tbdata["S_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(230,171,2)", width=1), name=tracename, legendrank=8, showlegend=True), row=1, col=1)
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["S_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(230,171,2)", width=1), name=tracename, legendrank=8, showlegend=True), row=1, col=1)
         if comp=='G_OPT_FEII_TEMPLATE':
             tracename="G-transition FeII"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["G_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#FF7F0E", width=1), name=tracename, legendrank=9, showlegend=True), row=1, col=1)

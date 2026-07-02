@@ -2,6 +2,9 @@
 **/__pycache__
 **.pyc
 **/.vscode
+**/*.egg-info/
+build/
+dist/
 example_notebooks/BADASS3_ifu_KCWI.ipynb
 neuralnet_training_data/
 example_spectra/5-test/
