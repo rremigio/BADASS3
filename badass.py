@@ -22,6 +22,7 @@ import matplotlib.gridspec as gridspec
 from scipy import optimize, linalg, special, fftpack
 from scipy.interpolate import griddata, interp1d
 from scipy.stats import f, chisquare
+#from scipy.ndimage import median_filter
 from scipy import stats
 import scipy
 from scipy.integrate import simpson
@@ -1190,7 +1191,12 @@ def run_single_thread(fits_file,
         if verbose:
             print("\tCurrent reduced chi-squared = %0.5f" % cur_rchi2)
         # Update noise
-        noise = noise*np.sqrt(cur_rchi2)
+        factor = badass_test_suite.noise_reweight_factor(
+            comp_dict["DATA"], comp_dict["MODEL"], noise, fit_mask=fit_mask)
+        if verbose:
+            print("\tNoise reweight factor = %0.4f" % factor)
+        #noise = noise*np.sqrt(cur_rchi2)
+        noise = noise * factor
         # Calculate new rchi2
         new_rchi2 = badass_test_suite.r_chi_squared(copy.deepcopy(comp_dict["DATA"]),copy.deepcopy(comp_dict["MODEL"]),noise,len(param_dict))
         if verbose:
@@ -4247,7 +4253,7 @@ def initialize_line_pars(lam_gal,galaxy,noise,comp_options,
             # print(peak_ang, peak_vel)
             # If velocity less than search_kms, calculate amplitude at that point
             if (peak_vel>=voff_plim[0]) & (peak_vel<=voff_plim[1]):
-                init_amp = galaxy[find_nearest(lam_gal,peak_ang)[1]]
+                init_amp = galaxy[find_nearest(lam_gal,peak_ang)[1]] # feed in the continuum-subtracted galaxy instead
                 if (init_amp>=min_amp) & (init_amp<=max_amp):
                     return init_amp/amp_factor, (min_amp, max_amp)
                 else:
@@ -4279,7 +4285,7 @@ def initialize_line_pars(lam_gal,galaxy,noise,comp_options,
                     return init_amp/amp_factor, (-max_amp, -min_amp)
                 else:
                     return -max_amp+(max_amp-min_amp)/2.0/amp_factor,(-max_amp, -min_amp)
-        #
+        
         else:
             init_amp = galaxy[find_nearest(lam_gal,line_center)[1]]
             if (init_amp>=min_amp) & (init_amp<=max_amp):
@@ -7154,6 +7160,27 @@ def calc_max_like_fit_quality(param_dict,noise,n_free_pars,line_list,combined_li
 
 #### Maximum Likelihood Fitting ##################################################
 
+# add a class at the module level, suggested by claude
+# this is to add a parameter-dependent step size in basinhopping,
+# which then leads to better sampling of the parameter space
+class ScaledStep:
+    """
+    The random displacement in basinhopping is scaled per-parameter
+    dependent on the plim range, and clipped to the bounds
+    """
+    def __init__(self, bounds, rel_step=0.1, seed=None):
+        self.lb = np.array([lb for (lb,ub) in bounds], dtype=float) # lower bounds
+        self.ub = np.array([ub for (lb,ub) in bounds], dtype=float) # same for upper bounds
+        self.scale = self.ub - self.lb # the range of plims
+        self.rel_step = rel_step
+        self.stepsize = 1.0
+        self.rng = np.random.default_rng(seed)
+    def __call__(self, x):
+        kick = self.rng.uniform(-1.0, 1.0, size=x.shape) * self.scale * self.rel_step * self.stepsize
+        #print('Step size: %0.5f' % self.stepsize)
+        return np.clip( x +kick, self.lb, self.ub)
+
+
 def max_likelihood(param_dict,
                    line_list,
                    combined_line_list,
@@ -7234,7 +7261,9 @@ def max_likelihood(param_dict,
     # Perform global optimization using basin-hopping algorithm (superior to minimize(), but slower)
     # We will use minimize() for the monte carlo bootstrap iterations.
 
-    lowest_rmse = badass_test_suite.root_mean_squared_error(copy.deepcopy(galaxy),np.zeros(len(galaxy)))
+    #lowest_rmse = badass_test_suite.root_mean_squared_error(copy.deepcopy(galaxy),np.zeros(len(galaxy))) we aren't using this anymore
+    lowest_rmse = np.inf # initialize it as a large number
+
     if force_best:
         force_basinhop = copy.deepcopy(n_basinhop)
         n_basinhop = 250 # Set to arbitrarily high threshold 
@@ -7243,81 +7272,104 @@ def max_likelihood(param_dict,
         basinhop_count = 0
         accepted_count = 0
         basinhop_value = np.inf
+        improve_count  = 0 # number of "new best f" events
 
         # Define a callback function for forcing a better fit to the B model 
         # if force_best=True;
         # see: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.basinhopping.html
         def callback_ftn(x,f, accepted):
-            nonlocal basinhop_value, basinhop_count, lowest_rmse, accepted_count
+            nonlocal basinhop_value, basinhop_count, lowest_rmse, accepted_count, improve_count
             # print(basinhop_value,basinhop_count)
             # print("at minimum %.4f accepted %d" % (f, int(accepted)))
-            
+
             if f<=basinhop_value:
-                basinhop_value=f 
+                basinhop_value=f
                 basinhop_count=0 # reset counter
-            elif f>basinhop_value:
-                basinhop_count+=1
-            if (accepted==1):
-                accepted_count+=1
+                improve_count+=1 # new best f found
 
-            # if basinhop_count>n_basinhop:
-            #     raise SystemExit(f"\n The global maximizer could not converge on a viable solution in {n_basinhop} steps.  Manually change the basinhopping step size to something reasonable.\n")
-
-            current_comps = fit_model(x,param_names,line_list,combined_line_list,lam_gal,galaxy,noise,
+                # In the case where we DO have a new best value, calculate RMSE
+                current_comps = fit_model(x,param_names,line_list,combined_line_list,lam_gal,galaxy,noise,
                                       comp_options,losvd_options,host_options,agn_temp_options,power_options,poly_options,
                                       opt_feii_options,uv_iron_options,balmer_options,outflow_test_options,
                                       host_template,agn_template,opt_feii_templates,uv_iron_template,balmer_template,
                                       stel_templates,blob_pars,disp_res,fit_mask,velscale,run_dir,"init",
                                       fit_stat,True)
-            rmse = badass_test_suite.root_mean_squared_error(copy.deepcopy(current_comps["DATA"]),copy.deepcopy(current_comps["MODEL"]))
+                                      
+                rmse = badass_test_suite.root_mean_squared_error(copy.deepcopy(current_comps["DATA"]),copy.deepcopy(current_comps["MODEL"]))
 
-            # Define an acceptance threshold
-            accept_thresh = 0.001
-            # Best/lowest achieved RMSE
-            if (rmse<=lowest_rmse): #(rmse<=force_thresh) and  (accepted==1) and (accepted_count>1) and 
-                lowest_rmse = rmse
+                # Best/lowest achieved RMSE
+                if (rmse<=lowest_rmse): #(rmse<=force_thresh) and  (accepted==1) and (accepted_count>1) and 
+                    lowest_rmse = rmse
+                
+            #elif f>basinhop_value:
+            else:
+                basinhop_count+=1
+            if (accepted==1):
+                accepted_count+=1
 
+            if full_verbose:
+                print(" Basin-hop | best f = %12.4f | current f = %12.4f | plateau %d/%d | accepted %d | new-best %d | stepsize %0.4f"
+                      % (basinhop_value, f, basinhop_count, force_basinhop, accepted_count, improve_count, my_step.stepsize))
+            # if basinhop_count>n_basinhop:
+            #     raise SystemExit(f"\n The global maximizer could not converge on a viable solution in {n_basinhop} steps.  Manually change the basinhopping step size to something reasonable.\n")
+
+
+            #
             # If basinhopping does get stuck in a local minimum, jump out by increasing the step size considerably
-            if ((basinhop_count>n_basinhop) and (accepted_count>=1)) and (((lowest_rmse-accept_thresh)>force_thresh) or (lowest_rmse>force_thresh)):
-                print(f" \n Warning: basinhopping has exceeded {n_basinhop} attemps to find a new global maximum.  Terminating fit...\n")
-                return True
-
+            #if ((basinhop_count>n_basinhop) and (accepted_count>=1)) and (((lowest_rmse-accept_thresh)>force_thresh) or (lowest_rmse>force_thresh)):
+            #    print(f" \n Warning: basinhopping has exceeded {n_basinhop} attemps to find a new global maximum.  Terminating fit...\n")
+            #    return True
+            #
             # If number of required basinhopping iterations have been achieved, and the best rmse is less than the current 
             # median within the median abs. deviation, terminate.
-            if (accepted_count>1) and (basinhop_count>=force_basinhop) and (((lowest_rmse-accept_thresh)<=force_thresh) or (lowest_rmse<=force_thresh)): # and (accepted_count>1) (basinhop_count)>=n_basinhop) and 
+            #if (accepted_count>1) and (basinhop_count>=force_basinhop) and (((lowest_rmse-accept_thresh)<=force_thresh) or (lowest_rmse<=force_thresh)): # and (accepted_count>1) (basinhop_count)>=n_basinhop) and 
+            #
+            #    if full_verbose:
+            #        print(" Fit Status: True")
+            #        print(" Force threshold: %0.4f" % force_thresh)
+            #        #print(" Lowest RMSE: %0.4f" % lowest_rmse)
+            #        #print(" Current RMSE: %0.4f" % rmse)
+            #        print(" Basinhop value: %0.4f" % basinhop_value)
+            #        print(" Accepted count: %d" % accepted_count)
+            #        print(" Basinhop count: %d" % basinhop_count)
+            #        print("\n")
+            #
+            #    return True 
+            #    
+            #else:
+            #
+            #    if full_verbose:
+            #        print(" Fit Status: False")
+            #        print(" Force threshold: %0.4f" % force_thresh)
+            #        #print(" Lowest RMSE: %0.4f" % lowest_rmse)
+            #        #print(" Current RMSE: %0.4f" % rmse)
+            #        print(" Accepted count: %d" % accepted_count)
+            #        print(" Basinhop count: %d" % basinhop_count)
+            #        print("\n")
+            #
+            #    return False 
 
-                if full_verbose:
-                    print(" Fit Status: True")
-                    print(" Force threshold: %0.4f" % force_thresh)
-                    print(" Lowest RMSE: %0.4f" % lowest_rmse)
-                    print(" Current RMSE: %0.4f" % rmse)
-                    print(" Accepted count: %d" % accepted_count)
-                    print(" Basinhop count: %d" % basinhop_count)
-                    print("\n")
-
-                return True 
-                
-            else:
-
-                if full_verbose:
-                    print(" Fit Status: False")
-                    print(" Force threshold: %0.4f" % force_thresh)
-                    print(" Lowest RMSE: %0.4f" % lowest_rmse)
-                    print(" Current RMSE: %0.4f" % rmse)
-                    print(" Accepted count: %d" % accepted_count)
-                    print(" Basinhop count: %d" % basinhop_count)
-                    print("\n")
-
-                return False 
+            # Optimizer converges to a solution
+            if (accepted_count > 1) and (basinhop_count >= force_basinhop) and (lowest_rmse <= force_thresh):
+                return True        
+            # Optimizer gets stuck
+            if (basinhop_count > n_basinhop) and (accepted_count >= 1) and (lowest_rmse > force_thresh):
+                print("\n Warning: basinhopping plateaued without reaching the target; terminating fit.\n")
+                return True
+            return False    
 
     if not force_best:
 
         callback_ftn=None
 
-    result = op.basinhopping(func = nll, 
+    # Named handle so the callback can report the (adaptively-updated) step size.
+    # scipy mutates my_step.stepsize in place via its AdaptiveStepsize wrapper.
+    my_step = ScaledStep(bounds, rel_step=0.001) # after trial and error with Mrk 1392, this was the best number
+
+    result = op.basinhopping(func = nll,
                              x0 = params,
-                             stepsize=1.0,
-                             interval=1,
+                             # stepsize=1.0, # override with the take_step kwarg
+                             interval=50, # originally 1, but revert to scipy default
                              niter = 2500, # Max # of iterations before stopping
                              minimizer_kwargs = {'args':(
                                                          param_names,
@@ -7359,6 +7411,7 @@ def max_likelihood(param_dict,
                               "options":{"disp":False,}},# "adaptive":True, }},
                                disp=verbose,
                                niter_success=n_basinhop, # Max # of successive search iterations
+                               take_step=my_step, # the ScaledStep instance created above
                                callback=callback_ftn,
                                )
     
@@ -7401,6 +7454,10 @@ def max_likelihood(param_dict,
                           fit_stat,
                           output_model)
 
+    # Final best-fit RMSE, computed once from the model that was going to be built anyway.
+    lowest_rmse = badass_test_suite.root_mean_squared_error(
+                  copy.deepcopy(comp_dict["DATA"]), copy.deepcopy(comp_dict["MODEL"]))
+
     #### Reweighting ###################################################################
 
     # If True, BADASS can reweight the noise to achieve a reduced chi-squared of 1.  It does this by multiplying the noise by the 
@@ -7415,7 +7472,12 @@ def max_likelihood(param_dict,
         if verbose:
             print("\tCurrent reduced chi-squared = %0.5f" % cur_rchi2)
         # Update noise
-        noise = noise*np.sqrt(cur_rchi2)
+        factor = badass_test_suite.noise_reweight_factor(comp_dict["DATA"], comp_dict["MODEL"],
+                                                         noise, fit_mask = fit_mask)
+        if verbose:
+            print("\tNoise reweight factor: %0.4f" % factor)
+        noise = noise * factor
+        #noise = noise*np.sqrt(cur_rchi2)
         # Calculate new rchi2
         new_rchi2 = badass_test_suite.r_chi_squared(copy.deepcopy(comp_dict["DATA"]),copy.deepcopy(comp_dict["MODEL"]),noise,len(par_best))
         if verbose:
@@ -8448,7 +8510,7 @@ def lnprior_jeffreys(x,**kwargs):
 def lnprior_flat(x,**kwargs):
 
     if (x>=kwargs["plim"][0]) & (x<=kwargs["plim"][1]):
-        return 1.0
+        return 0.0 # changed from the original that said 1
     else:
         return -np.inf
 

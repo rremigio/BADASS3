@@ -49,6 +49,43 @@ def r_chi_squared(data,model,noise,npar):
 
 ##################################################################################
 
+def noise_reweight_factor(data, model, noise, fit_mask=None,
+                          clip=(0.2, 5.0), noise_floor_frac=1e-3):
+    """
+    Robust noise-rescaling factor so that the *typical* normalized residual ~ 1.
+
+    - Uses only good pixels (fit_mask).
+    - Floors the noise to avoid divide-by-zero.
+    - Uses the median of squared normalized residuals (robust to outliers/line cores)
+      instead of the mean.
+    - Clips the factor to a sane range and never returns a non-finite value.
+    """
+
+    if fit_mask is not None:
+        data, model, noise = data[fit_mask], model[fit_mask], noise[fit_mask]
+
+    # Floor the noise so a near-zero pixel can't dominate.
+    med_noise = np.nanmedian(noise[noise > 0]) if np.any(noise > 0) else 1.0
+    noise = np.where(np.isfinite(noise) & (noise > 0),
+                     noise, med_noise)
+    noise = np.maximum(noise, noise_floor_frac * med_noise)
+
+    resid = (data - model) / noise
+    resid = resid[np.isfinite(resid)]
+    if resid.size == 0:
+        return 1.0
+
+    # Median of squared normalized residuals; for well-scaled noise this ~ 0.4549
+    # (median of a chi-square_1), so normalize by that to target ~1.
+    med_sq = np.nanmedian(resid**2)
+    factor = np.sqrt(med_sq / 0.4549) if np.isfinite(med_sq) and med_sq > 0 else 1.0
+
+    if not np.isfinite(factor) or factor <= 0:
+        return 1.0
+    return float(np.clip(factor, clip[0], clip[1]))
+
+##################################################################################
+
 def root_mean_squared_error(data,model):
 	"""
 	Simple calculation of root mean squared error (RMSE)
@@ -57,9 +94,10 @@ def root_mean_squared_error(data,model):
 
 	# Normalize by subtracting by the median of the data
 	data_med = np.nanmedian(data)
-	data  /= data_med
-	model /= data_med
-	return np.sqrt(1.0/len(data) * np.nansum((data-model)**2))
+	data  = data / data_med
+	model = model / data_med
+	
+	return np.sqrt(np.nanmean((data - model)**2))
 
 ##################################################################################
 
