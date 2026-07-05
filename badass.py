@@ -9788,21 +9788,25 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
         Z_templates = np.empty(( len(new_size), len(Z_trans_df['wavelength'].to_numpy()) ))
         # Generate templates with a amplitude of 1.0
         for i in range(np.shape(F_templates)[1]):
-            F = gaussian_angstroms(lam_feii, F_trans_df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)	
+            F = gaussian_angstroms(lam_feii, F_trans_df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)
             new_F = log_rebin(lamRange_feii, F, velscale=velscale)[0]
-            F_templates[:,i] = new_F/np.max(new_F)
-        for i in range(np.shape(S_templates)[1]): 
+            F_norm = np.max(new_F)
+            F_templates[:,i] = new_F/F_norm if F_norm>1.e-6 else np.zeros_like(new_F)
+        for i in range(np.shape(S_templates)[1]):
             S = gaussian_angstroms(lam_feii, S_trans_df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)
             new_S = log_rebin(lamRange_feii, S, velscale=velscale)[0]
-            S_templates[:,i] = new_S/np.max(new_S)
+            S_norm = np.max(new_S)
+            S_templates[:,i] = new_S/S_norm if S_norm>1.e-6 else np.zeros_like(new_S)
         for i in range(np.shape(G_templates)[1]):
             G = gaussian_angstroms(lam_feii, G_trans_df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)
             new_G = log_rebin(lamRange_feii, G, velscale=velscale)[0]
-            G_templates[:,i] = new_G/np.max(new_G)
+            G_norm = np.max(new_G)
+            G_templates[:,i] = new_G/G_norm if G_norm>1.e-6 else np.zeros_like(new_G)
         for i in range(np.shape(Z_templates)[1]):
             Z = gaussian_angstroms(lam_feii, Z_trans_df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)
             new_Z = log_rebin(lamRange_feii, Z, velscale=velscale)[0]
-            Z_templates[:,i] = new_Z/np.max(new_Z)
+            Z_norm = np.max(new_Z)
+            Z_templates[:,i] = new_Z/Z_norm if Z_norm>1.e-6 else np.zeros_like(new_Z)
 
         # Pre-compute the FFT for each transition
         F_trans_fft, F_trans_npad = template_rfft(F_templates)
