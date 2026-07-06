@@ -292,6 +292,9 @@ __status__	   = "Release"
 # - Bug fixes and minor changes
 # - Reweighting noise to achieve RCHI2=1 now done prior to bootstrapping and MCMC as needed (no longer a
 #   free parameter, which made it numerically unstable)
+# - Added Kovacevic-Dojcinovic et al. (2025) optical FeII template ("K25"), a 7-group
+#   (F/S/G/P+/G+/H/OL) evolution of K10 with double-Gaussian (ILR+VBLR) consistent-line
+#   groups and independently-widthed inconsistent-line groups.
 ##########################################################################################################
 
 
@@ -742,6 +745,17 @@ def run_single_thread(fits_file,
     elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="K10") & (lam_gal[-1]>=4400.0) & (lam_gal[0]<=5500.0):
         opt_feii_templates = initialize_opt_feii(lam_gal,opt_feii_options,disp_res,fit_mask,velscale)
     elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="K10") & ((lam_gal[-1]<4400.0) | (lam_gal[0]>5500.0)):
+        if verbose:
+            print('\n - Optical FeII template disabled because template is outside of fitting region.')
+        opt_feii_templates = None
+        fit_opt_feii = False
+        comp_options["fit_opt_feii"]=False
+        opt_feii_templates = None
+        write_log((),'update_opt_feii',run_dir)
+    # Kovacevic-Dojcinovic et al. (2025)
+    elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="K25") & (lam_gal[-1]>=4000.0) & (lam_gal[0]<=5600.0):
+        opt_feii_templates = initialize_opt_feii(lam_gal,opt_feii_options,disp_res,fit_mask,velscale)
+    elif (fit_opt_feii==True) & (opt_feii_options["opt_template"]["type"]=="K25") & ((lam_gal[-1]<4000.0) | (lam_gal[0]>5600.0)):
         if verbose:
             print('\n - Optical FeII template disabled because template is outside of fitting region.')
         opt_feii_templates = None
@@ -3267,6 +3281,73 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
             par_input['OPT_FEII_TEMP'] = ({'init'  :10000.0,
                                            'plim'  :(2000.0,25000.0),
                                            })
+    elif (fit_opt_feii==True) & (opt_feii_options['opt_template']['type']=='K25'):
+        if verbose:
+            print('\t- Fitting optical FeII template from Kovacevic-Dojcinovic et al. (2025)')
+
+        # Kovacevic-Dojcinovic et al. 2025 16-parameter FeII template
+        # 7 line groups: F, S, G ("consistent", intensities calculated from atomic data
+        # via a shared excitation temperature) and P+, G+, H, OL ("inconsistent", fixed
+        # empirical relative intensities).  Consistent lines are double Gaussians (shared
+        # ILR/VBLR widths + shared VBLR/ILR ratio); inconsistent lines are single Gaussians
+        # each with their own independent width.  All lines share one velocity shift.
+        if (opt_feii_options['opt_amp_const']['bool']==False):
+            par_input['K25_OPT_FEII_F_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_S_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_G_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_PPLUS_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_GPLUS_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_H_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+            par_input['K25_OPT_FEII_OL_AMP'] = ({'init'  :0.1*median_flux,
+                                            'plim'  :(0,max_flux),
+                                           })
+        if (opt_feii_options['opt_disp_const']['bool']==False):
+            # Shared consistent-line (F/S/G) ILR and VBLR widths
+            par_input['K25_OPT_FEII_ILR_DISP'] = ({'init'  :500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+            par_input['K25_OPT_FEII_VBLR_DISP'] = ({'init'  :1500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+            # Independent widths for each inconsistent line group
+            par_input['K25_OPT_FEII_PPLUS_DISP'] = ({'init'  :500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+            par_input['K25_OPT_FEII_GPLUS_DISP'] = ({'init'  :500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+            par_input['K25_OPT_FEII_H_DISP'] = ({'init'  :500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+            par_input['K25_OPT_FEII_OL_DISP'] = ({'init'  :500.0,
+                                           'plim'  :(0.1,6369.0),
+                                          })
+        if (opt_feii_options['opt_voff_const']['bool']==False):
+            # Shared shift for all FeII lines (paper bounds this to +/-3000 km/s)
+            par_input['K25_OPT_FEII_VOFF'] = ({'init'  :0.0,
+                                           'plim'  :(-3000.0,3000.0),
+                                          })
+        if (opt_feii_options['opt_temp_const']['bool']==False):
+            par_input['K25_OPT_FEII_TEMP'] = ({'init'  :10000.0,
+                                           'plim'  :(2000.0,25000.0),
+                                           })
+        if (opt_feii_options['opt_ratio_const']['bool']==False):
+            # Shared VBLR/ILR intensity ratio for all consistent (F/S/G) lines
+            par_input['K25_OPT_FEII_RATIO'] = ({'init'  :1.0,
+                                           'plim'  :(0.0,10.0),
+                                           })
     elif (fit_opt_feii==True) & (opt_feii_options['opt_template']['type']=='P22'):
         if verbose:
             print('\t- Fitting optical FeII template from Park et al. (2022)')
@@ -3520,6 +3601,9 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
             # ("",""),
             # ("",""),
 
+            # K25 optical FeII template: VBLR (wing) component must be at least as broad
+            # as the ILR (core) component
+            ("K25_OPT_FEII_VBLR_DISP","K25_OPT_FEII_ILR_DISP"),
 
         ]
 
@@ -6365,6 +6449,21 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
             elif key=='Z_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict_A['WAVE'], comp_dict_A['Z_OPT_FEII_TEMPLATE'], color='xkcd:rust', linewidth=0.5, linestyle='-' , label='Z-transition FeII')
+        elif (key in ['K25_F_OPT_FEII_TEMPLATE','K25_S_OPT_FEII_TEMPLATE','K25_G_OPT_FEII_TEMPLATE','K25_PPLUS_OPT_FEII_TEMPLATE','K25_GPLUS_OPT_FEII_TEMPLATE','K25_H_OPT_FEII_TEMPLATE','K25_OL_OPT_FEII_TEMPLATE']):
+            if key=='K25_F_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
+            elif key=='K25_S_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_S_OPT_FEII_TEMPLATE'], color='xkcd:mustard', linewidth=0.5, linestyle='-' , label='S-transition FeII')
+            elif key=='K25_G_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
+            elif key=='K25_PPLUS_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_PPLUS_OPT_FEII_TEMPLATE'], color='xkcd:cyan', linewidth=0.5, linestyle='-' , label='P+ FeII')
+            elif key=='K25_GPLUS_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_GPLUS_OPT_FEII_TEMPLATE'], color='xkcd:violet', linewidth=0.5, linestyle='-' , label='G+ FeII')
+            elif key=='K25_H_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_H_OPT_FEII_TEMPLATE'], color='xkcd:teal', linewidth=0.5, linestyle='-' , label='H FeII')
+            elif key=='K25_OL_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict_A['WAVE'], comp_dict_A['K25_OL_OPT_FEII_TEMPLATE'], color='xkcd:brown', linewidth=0.5, linestyle='-' , label='OL FeII')
         elif (key=='UV_IRON_TEMPLATE'):
             ax1.plot(comp_dict_A['WAVE'], comp_dict_A['UV_IRON_TEMPLATE'], color='xkcd:bright purple', linewidth=0.5, linestyle='-' , label='UV Iron'	 )
         elif (key=='BALMER_CONT'):
@@ -6477,6 +6576,21 @@ def line_test_plot(n,test,ncomp_A,ncomp_B,
                 ax3.plot(comp_dict_B['WAVE'], comp_dict_B['G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
             elif key=='Z_OPT_FEII_TEMPLATE':
                 ax3.plot(comp_dict_B['WAVE'], comp_dict_B['Z_OPT_FEII_TEMPLATE'], color='xkcd:rust', linewidth=0.5, linestyle='-' , label='Z-transition FeII')
+        elif (key in ['K25_F_OPT_FEII_TEMPLATE','K25_S_OPT_FEII_TEMPLATE','K25_G_OPT_FEII_TEMPLATE','K25_PPLUS_OPT_FEII_TEMPLATE','K25_GPLUS_OPT_FEII_TEMPLATE','K25_H_OPT_FEII_TEMPLATE','K25_OL_OPT_FEII_TEMPLATE']):
+            if key=='K25_F_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
+            elif key=='K25_S_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_S_OPT_FEII_TEMPLATE'], color='xkcd:mustard', linewidth=0.5, linestyle='-' , label='S-transition FeII')
+            elif key=='K25_G_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
+            elif key=='K25_PPLUS_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_PPLUS_OPT_FEII_TEMPLATE'], color='xkcd:cyan', linewidth=0.5, linestyle='-' , label='P+ FeII')
+            elif key=='K25_GPLUS_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_GPLUS_OPT_FEII_TEMPLATE'], color='xkcd:violet', linewidth=0.5, linestyle='-' , label='G+ FeII')
+            elif key=='K25_H_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_H_OPT_FEII_TEMPLATE'], color='xkcd:teal', linewidth=0.5, linestyle='-' , label='H FeII')
+            elif key=='K25_OL_OPT_FEII_TEMPLATE':
+                ax3.plot(comp_dict_B['WAVE'], comp_dict_B['K25_OL_OPT_FEII_TEMPLATE'], color='xkcd:brown', linewidth=0.5, linestyle='-' , label='OL FeII')
         elif (key=='UV_IRON_TEMPLATE'):
             ax3.plot(comp_dict_B['WAVE'], comp_dict_B['UV_IRON_TEMPLATE'], color='xkcd:bright purple', linewidth=0.5, linestyle='-' , label='UV Iron'	 )
         elif (key=='BALMER_CONT'):
@@ -8189,6 +8303,21 @@ def max_like_plot(lam_gal,comp_dict,line_list,params,param_names,fit_mask,fit_no
                     ax1.plot(comp_dict['WAVE'], comp_dict['G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
                 elif key=='Z_OPT_FEII_TEMPLATE':
                     ax1.plot(comp_dict['WAVE'], comp_dict['Z_OPT_FEII_TEMPLATE'], color='xkcd:rust', linewidth=0.5, linestyle='-' , label='Z-transition FeII')
+            elif (key in ['K25_F_OPT_FEII_TEMPLATE','K25_S_OPT_FEII_TEMPLATE','K25_G_OPT_FEII_TEMPLATE','K25_PPLUS_OPT_FEII_TEMPLATE','K25_GPLUS_OPT_FEII_TEMPLATE','K25_H_OPT_FEII_TEMPLATE','K25_OL_OPT_FEII_TEMPLATE']):
+                if key=='K25_F_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
+                elif key=='K25_S_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_S_OPT_FEII_TEMPLATE'], color='xkcd:mustard', linewidth=0.5, linestyle='-' , label='S-transition FeII')
+                elif key=='K25_G_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
+                elif key=='K25_PPLUS_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_PPLUS_OPT_FEII_TEMPLATE'], color='xkcd:cyan', linewidth=0.5, linestyle='-' , label='P+ FeII')
+                elif key=='K25_GPLUS_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_GPLUS_OPT_FEII_TEMPLATE'], color='xkcd:violet', linewidth=0.5, linestyle='-' , label='G+ FeII')
+                elif key=='K25_H_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_H_OPT_FEII_TEMPLATE'], color='xkcd:teal', linewidth=0.5, linestyle='-' , label='H FeII')
+                elif key=='K25_OL_OPT_FEII_TEMPLATE':
+                    ax1.plot(comp_dict['WAVE'], comp_dict['K25_OL_OPT_FEII_TEMPLATE'], color='xkcd:brown', linewidth=0.5, linestyle='-' , label='OL FeII')
             elif (key=='UV_IRON_TEMPLATE'):
                 ax1.plot(comp_dict['WAVE'], comp_dict['UV_IRON_TEMPLATE'], color='xkcd:bright purple', linewidth=0.5, linestyle='-' , label='UV Iron'	 )
             elif (key=='BALMER_CONT'):
@@ -9130,6 +9259,19 @@ def fit_model(params,
             comp_dict['G_OPT_FEII_TEMPLATE'] = g_template
             comp_dict['Z_OPT_FEII_TEMPLATE'] = z_template
 
+        elif (opt_feii_options['opt_template']['type']=='K25'):
+
+            f_template, s_template, g_template, pplus_template, gplus_template, h_template, ol_template = K25_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale)
+
+            host_model = (host_model) - (f_template) - (s_template) - (g_template) - (pplus_template) - (gplus_template) - (h_template) - (ol_template)
+            comp_dict['K25_F_OPT_FEII_TEMPLATE']     = f_template
+            comp_dict['K25_S_OPT_FEII_TEMPLATE']     = s_template
+            comp_dict['K25_G_OPT_FEII_TEMPLATE']     = g_template
+            comp_dict['K25_PPLUS_OPT_FEII_TEMPLATE'] = pplus_template
+            comp_dict['K25_GPLUS_OPT_FEII_TEMPLATE'] = gplus_template
+            comp_dict['K25_H_OPT_FEII_TEMPLATE']     = h_template
+            comp_dict['K25_OL_OPT_FEII_TEMPLATE']    = ol_template
+
         elif (opt_feii_options['opt_template']['type']=='P22'):
             opt_feii_template = P22_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale)
             host_model = (host_model) - (opt_feii_template)
@@ -9667,6 +9809,17 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
     'P22'  : Park et al. (2022) template based on Mrk 493 STIS spectra. Acts
              as essentially a one-component version of the VC04 template with
              only up to 3 free parameters.
+
+    'K25'  : Kovacevic-Dojcinovic et al. (2025) template, an evolution of K10 that
+             re-partitions the line list into 7 groups.  F, S, and G ("consistent")
+             line groups have relative intensities calculated from atomic data via
+             a shared excitation temperature, exactly as in K10, but are each fit
+             as double Gaussians (a shared ILR width for the line core and a shared
+             VBLR width for the wings, tied together by a single shared VBLR/ILR
+             intensity ratio).  P+, G+, H, and OL ("inconsistent") line groups have
+             fixed empirical relative intensities (no temperature dependence) and
+             are each fit as single Gaussians with their own independent width.
+             All 7 groups share one velocity shift.  16 free parameters total.
     """
     if (opt_feii_options['opt_template']['type']=='VC04'):
         # Load the data into Pandas DataFrames
@@ -9851,6 +10004,129 @@ def initialize_opt_feii(lam_gal, opt_feii_options, disp_res, fit_mask, velscale)
                     S_trans_fft, S_trans_df['wavelength'].to_numpy() ,S_trans_df['gf'].to_numpy(), S_trans_df['E2_J'].to_numpy(),
                     G_trans_fft, G_trans_df['wavelength'].to_numpy() ,G_trans_df['gf'].to_numpy(), G_trans_df['E2_J'].to_numpy(),
                     Z_trans_fft, Z_trans_df['rel_int'].to_numpy(),
+                    npad, vsyst
+                    )
+
+        # Return a list of arrays which will be unpacked during the fitting process
+        return opt_feii_templates
+
+    elif (opt_feii_options['opt_template']['type']=='K25'):
+
+        # Kovacevic-Dojcinovic et al. (2025) 7-group FeII template.  As with K10, we build
+        # a unit-amplitude Gaussian for each individual line of each of the 7 groups
+        # (F, S, G, P+, G+, H, OL), on a common high-resolution wavelength grid, then
+        # precompute the FFT of each group's stack of lines so they can be convolved
+        # cheaply during the fit.  Unlike K10, the "consistent" groups (F, S, G) are
+        # convolved *twice* per fit iteration -- once at the shared ILR width and once at
+        # the shared VBLR width -- and the two components are combined (via the shared
+        # VBLR/ILR ratio) in K25_opt_feii_template.  The "inconsistent" groups (P+, G+, H,
+        # OL) are convolved once each, at their own independent width, and scaled by their
+        # fixed (non-temperature-dependent) relative intensities.
+
+        def gaussian_angstroms(x, center, amp, disp, voff):
+            x = x.reshape((len(x),1))
+            g = amp*np.exp(-0.5*(x-(center))**2/(disp)**2) # construct gaussian
+            g = np.sum(g,axis=1)
+            g[0]  = g[1]
+            g[-1] = g[-2]
+            return g
+        #
+        # Read in template data
+        data_dir = BADASS_DIR.joinpath("badass_data","feii_templates","kovacevic_2025")
+        F_trans_df     = pd.read_csv(str(data_dir.joinpath('K25_F_transitions.csv')))
+        S_trans_df     = pd.read_csv(str(data_dir.joinpath('K25_S_transitions.csv')))
+        G_trans_df     = pd.read_csv(str(data_dir.joinpath('K25_G_transitions.csv')))
+        Pplus_trans_df = pd.read_csv(str(data_dir.joinpath('K25_Pplus_transitions.csv')))
+        Gplus_trans_df = pd.read_csv(str(data_dir.joinpath('K25_Gplus_transitions.csv')))
+        H_trans_df     = pd.read_csv(str(data_dir.joinpath('K25_H_transitions.csv')))
+        OL_trans_df    = pd.read_csv(str(data_dir.joinpath('K25_OL_transitions.csv')))
+        # Generate a high-resolution wavelength scale that is universal to all transitions
+        fwhm = 1.0 # Angstroms
+        disp = fwhm/2.3548
+        dlam_feii = 0.1 # linear spacing in Angstroms
+        npad = 100
+        lam_feii = np.arange(np.min(lam_gal)-npad, np.max(lam_gal)+npad, dlam_feii)
+        lamRange_feii = [np.min(lam_feii), np.max(lam_feii)]
+        # Get size of output log-rebinned spectrum
+        F0 = gaussian_angstroms(lam_feii, F_trans_df["wavelength"].to_numpy()[0], 1.0, disp, 0.0)
+        new_size, loglam_feii, velscale_feii = log_rebin(lamRange_feii, F0, velscale=velscale)
+
+        def build_templates(df):
+            templates = np.empty((len(new_size), len(df['wavelength'].to_numpy())))
+            for i in range(np.shape(templates)[1]):
+                line = gaussian_angstroms(lam_feii, df["wavelength"].to_numpy()[i], 1.0, disp, 0.0)
+                new_line = log_rebin(lamRange_feii, line, velscale=velscale)[0]
+                line_norm = np.max(new_line)
+                templates[:,i] = new_line/line_norm if line_norm>1.e-6 else np.zeros_like(new_line)
+            return templates
+
+        F_templates     = build_templates(F_trans_df)
+        S_templates     = build_templates(S_trans_df)
+        G_templates     = build_templates(G_trans_df)
+        Pplus_templates = build_templates(Pplus_trans_df)
+        Gplus_templates = build_templates(Gplus_trans_df)
+        H_templates     = build_templates(H_trans_df)
+        OL_templates    = build_templates(OL_trans_df)
+
+        # Pre-compute the FFT for each transition group
+        F_trans_fft,     F_trans_npad     = template_rfft(F_templates)
+        S_trans_fft,     S_trans_npad     = template_rfft(S_templates)
+        G_trans_fft,     G_trans_npad     = template_rfft(G_templates)
+        Pplus_trans_fft, Pplus_trans_npad = template_rfft(Pplus_templates)
+        Gplus_trans_fft, Gplus_trans_npad = template_rfft(Gplus_templates)
+        H_trans_fft,     H_trans_npad     = template_rfft(H_templates)
+        OL_trans_fft,    OL_trans_npad    = template_rfft(OL_templates)
+        npad = F_trans_npad
+
+        c = 299792.458 # speed of light in km/s
+        vsyst = np.log(lam_feii[0]/lam_gal[0])*c
+
+        # If opt_disp_const=True AND opt_voff_const=True, we preconvolve the templates so we
+        # don't have to during the fit.  Consistent groups (F/S/G) are preconvolved at both
+        # the fixed ILR and fixed VBLR widths.
+        if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+
+            ilr_disp  = opt_feii_options["opt_disp_const"]["ilr_feii_val"]
+            vblr_disp = opt_feii_options["opt_disp_const"]["vblr_feii_val"]
+            pplus_disp = opt_feii_options["opt_disp_const"]["pplus_feii_val"]
+            gplus_disp = opt_feii_options["opt_disp_const"]["gplus_feii_val"]
+            h_disp     = opt_feii_options["opt_disp_const"]["h_feii_val"]
+            ol_disp    = opt_feii_options["opt_disp_const"]["ol_feii_val"]
+            feii_voff  = opt_feii_options["opt_voff_const"]["opt_feii_val"]
+
+            def conv(fft, npad_, disp_):
+                return convolve_gauss_hermite(fft, npad_, float(velscale),
+                                               [feii_voff, disp_], lam_gal.shape[0],
+                                               velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+
+            f_ilr, f_vblr = conv(F_trans_fft, F_trans_npad, ilr_disp), conv(F_trans_fft, F_trans_npad, vblr_disp)
+            s_ilr, s_vblr = conv(S_trans_fft, S_trans_npad, ilr_disp), conv(S_trans_fft, S_trans_npad, vblr_disp)
+            g_ilr, g_vblr = conv(G_trans_fft, G_trans_npad, ilr_disp), conv(G_trans_fft, G_trans_npad, vblr_disp)
+            pplus_conv = conv(Pplus_trans_fft, Pplus_trans_npad, pplus_disp)
+            gplus_conv = conv(Gplus_trans_fft, Gplus_trans_npad, gplus_disp)
+            h_conv     = conv(H_trans_fft, H_trans_npad, h_disp)
+            ol_conv    = conv(OL_trans_fft, OL_trans_npad, ol_disp)
+
+            opt_feii_templates = (
+                    f_ilr, f_vblr, F_trans_df['wavelength'].to_numpy(), F_trans_df['gf'].to_numpy(), F_trans_df['E2_J'].to_numpy(),
+                    s_ilr, s_vblr, S_trans_df['wavelength'].to_numpy(), S_trans_df['gf'].to_numpy(), S_trans_df['E2_J'].to_numpy(),
+                    g_ilr, g_vblr, G_trans_df['wavelength'].to_numpy(), G_trans_df['gf'].to_numpy(), G_trans_df['E2_J'].to_numpy(),
+                    pplus_conv, Pplus_trans_df['rel_int'].to_numpy(),
+                    gplus_conv, Gplus_trans_df['rel_int'].to_numpy(),
+                    h_conv, H_trans_df['rel_int'].to_numpy(),
+                    ol_conv, OL_trans_df['rel_int'].to_numpy(),
+                    )
+        #
+        elif (opt_feii_options["opt_disp_const"]["bool"]==False) | (opt_feii_options["opt_voff_const"]["bool"]==False):
+
+            opt_feii_templates = (
+                    F_trans_fft, F_trans_df['wavelength'].to_numpy(), F_trans_df['gf'].to_numpy(), F_trans_df['E2_J'].to_numpy(),
+                    S_trans_fft, S_trans_df['wavelength'].to_numpy(), S_trans_df['gf'].to_numpy(), S_trans_df['E2_J'].to_numpy(),
+                    G_trans_fft, G_trans_df['wavelength'].to_numpy(), G_trans_df['gf'].to_numpy(), G_trans_df['E2_J'].to_numpy(),
+                    Pplus_trans_fft, Pplus_trans_df['rel_int'].to_numpy(),
+                    Gplus_trans_fft, Gplus_trans_df['rel_int'].to_numpy(),
+                    H_trans_fft, H_trans_df['rel_int'].to_numpy(),
+                    OL_trans_fft, OL_trans_df['rel_int'].to_numpy(),
                     npad, vsyst
                     )
 
@@ -10264,7 +10540,136 @@ def K10_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, vels
 
 
     return f_template,s_template,g_template,z_template
-    
+
+def _k25_normalize_cols(conv_temp):
+    """Normalize each column (line) of a convolved template stack to a max of 1."""
+    norm = np.array([np.max(conv_temp[:,i]) for i in range(np.shape(conv_temp)[1])])
+    norm[norm<1.e-6] = 1.0
+    return conv_temp/norm
+
+def K25_opt_feii_template(p, lam_gal, opt_feii_templates, opt_feii_options, velscale):
+    """
+    Constructs a Kovacevic-Dojcinovic et al. (2025) FeII template.  F, S, and G
+    ("consistent") groups are each a temperature-weighted sum of double Gaussians
+    (shared ILR + VBLR components, tied by a single shared VBLR/ILR ratio); P+, G+, H,
+    and OL ("inconsistent") groups are each a sum of single Gaussians scaled by fixed
+    empirical relative intensities.  All groups share one velocity shift.
+    """
+
+    # Parse FeII options
+    if (opt_feii_options['opt_amp_const']['bool']==False): # if amp not constant
+        f_amp     = p['K25_OPT_FEII_F_AMP']
+        s_amp     = p['K25_OPT_FEII_S_AMP']
+        g_amp     = p['K25_OPT_FEII_G_AMP']
+        pplus_amp = p['K25_OPT_FEII_PPLUS_AMP']
+        gplus_amp = p['K25_OPT_FEII_GPLUS_AMP']
+        h_amp     = p['K25_OPT_FEII_H_AMP']
+        ol_amp    = p['K25_OPT_FEII_OL_AMP']
+    else: # if amp constant
+        f_amp     = opt_feii_options['opt_amp_const']['f_feii_val']
+        s_amp     = opt_feii_options['opt_amp_const']['s_feii_val']
+        g_amp     = opt_feii_options['opt_amp_const']['g_feii_val']
+        pplus_amp = opt_feii_options['opt_amp_const']['pplus_feii_val']
+        gplus_amp = opt_feii_options['opt_amp_const']['gplus_feii_val']
+        h_amp     = opt_feii_options['opt_amp_const']['h_feii_val']
+        ol_amp    = opt_feii_options['opt_amp_const']['ol_feii_val']
+    #
+    if (opt_feii_options['opt_disp_const']['bool']==False): # if disp not constant
+        ilr_disp   = p['K25_OPT_FEII_ILR_DISP']
+        vblr_disp  = p['K25_OPT_FEII_VBLR_DISP']
+        pplus_disp = p['K25_OPT_FEII_PPLUS_DISP']
+        gplus_disp = p['K25_OPT_FEII_GPLUS_DISP']
+        h_disp     = p['K25_OPT_FEII_H_DISP']
+        ol_disp    = p['K25_OPT_FEII_OL_DISP']
+    else: # if disp constant
+        ilr_disp   = opt_feii_options['opt_disp_const']['ilr_feii_val']
+        vblr_disp  = opt_feii_options['opt_disp_const']['vblr_feii_val']
+        pplus_disp = opt_feii_options['opt_disp_const']['pplus_feii_val']
+        gplus_disp = opt_feii_options['opt_disp_const']['gplus_feii_val']
+        h_disp     = opt_feii_options['opt_disp_const']['h_feii_val']
+        ol_disp    = opt_feii_options['opt_disp_const']['ol_feii_val']
+    if ilr_disp  <=0.01: ilr_disp  = 0.01
+    if vblr_disp <=0.01: vblr_disp = 0.01
+    if pplus_disp<=0.01: pplus_disp= 0.01
+    if gplus_disp<=0.01: gplus_disp= 0.01
+    if h_disp    <=0.01: h_disp    = 0.01
+    if ol_disp   <=0.01: ol_disp   = 0.01
+    #
+    if (opt_feii_options['opt_voff_const']['bool']==False): # if voff not constant
+        voff = p['K25_OPT_FEII_VOFF']
+    else: # if voff constant
+        voff = opt_feii_options['opt_voff_const']['opt_feii_val']
+    #
+    if (opt_feii_options['opt_temp_const']['bool']==False): # if temp not constant
+        temp = p['K25_OPT_FEII_TEMP']
+    else: # if temp constant
+        temp = opt_feii_options['opt_temp_const']['opt_feii_val']
+    #
+    if (opt_feii_options['opt_ratio_const']['bool']==False): # if ratio not constant
+        ratio = p['K25_OPT_FEII_RATIO']
+    else: # if ratio constant
+        ratio = opt_feii_options['opt_ratio_const']['opt_feii_val']
+
+    def consistent_template(ilr_conv, vblr_conv, center, gf, e2, transition, amp):
+        ilr_norm  = _k25_normalize_cols(ilr_conv)
+        vblr_norm = _k25_normalize_cols(vblr_conv)
+        rel_int = calculate_k10_rel_int(transition, center, gf, e2, amp, temp)
+        combined = rel_int * (ilr_norm + ratio*vblr_norm)
+        return np.sum(combined, axis=1)
+
+    def inconsistent_template(conv_temp, rel_int, amp):
+        norm = _k25_normalize_cols(conv_temp)
+        combined = norm * rel_int * amp
+        return np.sum(combined, axis=1)
+
+    if (opt_feii_options["opt_disp_const"]["bool"]==True) & (opt_feii_options["opt_voff_const"]["bool"]==True):
+        #
+        # Unpack pre-convolved tables for each template
+        (f_ilr, f_vblr, f_center, f_gf, f_e2,
+         s_ilr, s_vblr, s_center, s_gf, s_e2,
+         g_ilr, g_vblr, g_center, g_gf, g_e2,
+         pplus_conv, pplus_rel_int,
+         gplus_conv, gplus_rel_int,
+         h_conv, h_rel_int,
+         ol_conv, ol_rel_int) = opt_feii_templates
+
+        f_template = consistent_template(f_ilr, f_vblr, f_center, f_gf, f_e2, "F", f_amp)
+        s_template = consistent_template(s_ilr, s_vblr, s_center, s_gf, s_e2, "S", s_amp)
+        g_template = consistent_template(g_ilr, g_vblr, g_center, g_gf, g_e2, "G", g_amp)
+
+        pplus_template = inconsistent_template(pplus_conv, pplus_rel_int, pplus_amp)
+        gplus_template = inconsistent_template(gplus_conv, gplus_rel_int, gplus_amp)
+        h_template     = inconsistent_template(h_conv, h_rel_int, h_amp)
+        ol_template    = inconsistent_template(ol_conv, ol_rel_int, ol_amp)
+
+    elif (opt_feii_options["opt_disp_const"]["bool"]==False) | (opt_feii_options["opt_voff_const"]["bool"]==False):
+        #
+        # Unpack FFTs and line data for each template
+        (f_fft, f_center, f_gf, f_e2,
+         s_fft, s_center, s_gf, s_e2,
+         g_fft, g_center, g_gf, g_e2,
+         pplus_fft, pplus_rel_int,
+         gplus_fft, gplus_rel_int,
+         h_fft, h_rel_int,
+         ol_fft, ol_rel_int,
+         npad, vsyst) = opt_feii_templates
+
+        def conv(fft, disp_):
+            return convolve_gauss_hermite(fft, npad, float(velscale),
+                                           [voff, disp_], lam_gal.shape[0],
+                                           velscale_ratio=1, sigma_diff=0, vsyst=vsyst)
+
+        f_template = consistent_template(conv(f_fft, ilr_disp), conv(f_fft, vblr_disp), f_center, f_gf, f_e2, "F", f_amp)
+        s_template = consistent_template(conv(s_fft, ilr_disp), conv(s_fft, vblr_disp), s_center, s_gf, s_e2, "S", s_amp)
+        g_template = consistent_template(conv(g_fft, ilr_disp), conv(g_fft, vblr_disp), g_center, g_gf, g_e2, "G", g_amp)
+
+        pplus_template = inconsistent_template(conv(pplus_fft, pplus_disp), pplus_rel_int, pplus_amp)
+        gplus_template = inconsistent_template(conv(gplus_fft, gplus_disp), gplus_rel_int, gplus_amp)
+        h_template     = inconsistent_template(conv(h_fft, h_disp), h_rel_int, h_amp)
+        ol_template    = inconsistent_template(conv(ol_fft, ol_disp), ol_rel_int, ol_amp)
+
+    return f_template, s_template, g_template, pplus_template, gplus_template, h_template, ol_template
+
 def calculate_k10_rel_int(transition,center,gf,e2,I2,temp):
     """
     Calculate relative intensities for the S, F, and G FeII line groups
@@ -12631,6 +13036,21 @@ def plot_best_model(param_dict,
                 ax1.plot(comp_dict['WAVE'], comp_dict['G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
             elif key=='Z_OPT_FEII_TEMPLATE':
                 ax1.plot(comp_dict['WAVE'], comp_dict['Z_OPT_FEII_TEMPLATE'], color='xkcd:rust', linewidth=0.5, linestyle='-' , label='Z-transition FeII')
+        elif (key in ['K25_F_OPT_FEII_TEMPLATE','K25_S_OPT_FEII_TEMPLATE','K25_G_OPT_FEII_TEMPLATE','K25_PPLUS_OPT_FEII_TEMPLATE','K25_GPLUS_OPT_FEII_TEMPLATE','K25_H_OPT_FEII_TEMPLATE','K25_OL_OPT_FEII_TEMPLATE']):
+            if key=='K25_F_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_F_OPT_FEII_TEMPLATE'], color='xkcd:yellow', linewidth=0.5, linestyle='-' , label='F-transition FeII')
+            elif key=='K25_S_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_S_OPT_FEII_TEMPLATE'], color='xkcd:mustard', linewidth=0.5, linestyle='-' , label='S-transition FeII')
+            elif key=='K25_G_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_G_OPT_FEII_TEMPLATE'], color='xkcd:orange', linewidth=0.5, linestyle='-' , label='G-transition FeII')
+            elif key=='K25_PPLUS_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_PPLUS_OPT_FEII_TEMPLATE'], color='xkcd:cyan', linewidth=0.5, linestyle='-' , label='P+ FeII')
+            elif key=='K25_GPLUS_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_GPLUS_OPT_FEII_TEMPLATE'], color='xkcd:violet', linewidth=0.5, linestyle='-' , label='G+ FeII')
+            elif key=='K25_H_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_H_OPT_FEII_TEMPLATE'], color='xkcd:teal', linewidth=0.5, linestyle='-' , label='H FeII')
+            elif key=='K25_OL_OPT_FEII_TEMPLATE':
+                ax1.plot(comp_dict['WAVE'], comp_dict['K25_OL_OPT_FEII_TEMPLATE'], color='xkcd:brown', linewidth=0.5, linestyle='-' , label='OL FeII')
         elif (key=='UV_IRON_TEMPLATE'):
             ax1.plot(comp_dict['WAVE'], comp_dict['UV_IRON_TEMPLATE'], color='xkcd:bright purple', linewidth=0.5, linestyle='-' , label='UV Iron'	 )
         elif (key=='BALMER_CONT'):
@@ -13042,6 +13462,27 @@ def plotly_best_fit(objname,line_list,fit_mask,run_dir):
         if comp=='Z_OPT_FEII_TEMPLATE':
             tracename="Z-transition FeII"
             fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["Z_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(217,95,2)", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
+        if comp=='K25_F_OPT_FEII_TEMPLATE':
+            tracename="F-transition FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_F_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(255,255,51)", width=1), name=tracename, legendrank=7, showlegend=True), row=1, col=1)
+        if comp=='K25_S_OPT_FEII_TEMPLATE':
+            tracename="S-transition FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_S_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="rgb(230,171,2)", width=1), name=tracename, legendrank=8, showlegend=True), row=1, col=1)
+        if comp=='K25_G_OPT_FEII_TEMPLATE':
+            tracename="G-transition FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_G_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#FF7F0E", width=1), name=tracename, legendrank=9, showlegend=True), row=1, col=1)
+        if comp=='K25_PPLUS_OPT_FEII_TEMPLATE':
+            tracename="P+ FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_PPLUS_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#00CED1", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
+        if comp=='K25_GPLUS_OPT_FEII_TEMPLATE':
+            tracename="G+ FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_GPLUS_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#EE82EE", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
+        if comp=='K25_H_OPT_FEII_TEMPLATE':
+            tracename="H FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_H_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#008080", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
+        if comp=='K25_OL_OPT_FEII_TEMPLATE':
+            tracename="OL FeII"
+            fig.add_trace(go.Scatter( x = tbdata["WAVE"], y = tbdata["K25_OL_OPT_FEII_TEMPLATE"], mode="lines", line=go.scatter.Line(color="#A52A2A", width=1), name=tracename, legendrank=10, showlegend=True), row=1, col=1)
         # Line components
         if comp in line_list:
             if line_list[comp]["line_type"]=="na":
@@ -13404,6 +13845,13 @@ def write_log(output_val,output_type,run_dir):
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_disp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_disp_const']['bool']),str(opt_feii_options['opt_disp_const']['opt_feii_val']),)))
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_voff_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_voff_const']['bool']),str(opt_feii_options['opt_voff_const']['opt_feii_val']),)))
                 logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_temp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_temp_const']['bool']),str(opt_feii_options['opt_temp_const']['opt_feii_val']),)))
+            if (comp_options['fit_opt_feii']==True) and (opt_feii_options['opt_template']['type']=='K25'):
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_template:',':','type: %s' % str(opt_feii_options['opt_template']['type']) ))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_amp_const',':','bool: %s, f_feii_val: %s, s_feii_val: %s, g_feii_val: %s, pplus_feii_val: %s, gplus_feii_val: %s, h_feii_val: %s, ol_feii_val: %s' % (str(opt_feii_options['opt_amp_const']['bool']),str(opt_feii_options['opt_amp_const']['f_feii_val']),str(opt_feii_options['opt_amp_const']['s_feii_val']),str(opt_feii_options['opt_amp_const']['g_feii_val']),str(opt_feii_options['opt_amp_const']['pplus_feii_val']),str(opt_feii_options['opt_amp_const']['gplus_feii_val']),str(opt_feii_options['opt_amp_const']['h_feii_val']),str(opt_feii_options['opt_amp_const']['ol_feii_val']))))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_disp_const',':','bool: %s, ilr_feii_val: %s, vblr_feii_val: %s, pplus_feii_val: %s, gplus_feii_val: %s, h_feii_val: %s, ol_feii_val: %s' % (str(opt_feii_options['opt_disp_const']['bool']),str(opt_feii_options['opt_disp_const']['ilr_feii_val']),str(opt_feii_options['opt_disp_const']['vblr_feii_val']),str(opt_feii_options['opt_disp_const']['pplus_feii_val']),str(opt_feii_options['opt_disp_const']['gplus_feii_val']),str(opt_feii_options['opt_disp_const']['h_feii_val']),str(opt_feii_options['opt_disp_const']['ol_feii_val']))))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_voff_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_voff_const']['bool']),str(opt_feii_options['opt_voff_const']['opt_feii_val']),)))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_temp_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_temp_const']['bool']),str(opt_feii_options['opt_temp_const']['opt_feii_val']),)))
+                logfile.write('\n{0:>30}{1:<2}{2:<100}'.format('opt_ratio_const',':','bool: %s, opt_feii_val: %s' % (str(opt_feii_options['opt_ratio_const']['bool']),str(opt_feii_options['opt_ratio_const']['opt_feii_val']),)))
             elif comp_options["fit_opt_feii"]==False:
                 logfile.write('\n{0:<30}{1:<30}{2:<30}'.format('   opt_feii_options:','',''))
                 logfile.write('\n{0:>30}{1:<2}{2:<30}'.format('','','Optical FeII fitting is turned off.' )) 
