@@ -3121,7 +3121,7 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
         if losvd_options["vel_const"]["bool"]==False:
             #
             par_input['STEL_VEL'] = ({'init':100. ,
-                                         'plim':(-500.,500.),
+                                         'plim':(-800.,800.),
                                         })
         # Stellar velocity dispersion
         if losvd_options["disp_const"]["bool"]==False:
