@@ -295,6 +295,29 @@ __status__	   = "Release"
 # - Added Kovacevic-Dojcinovic et al. (2025) optical FeII template ("K25"), a 7-group
 #   (F/S/G/P+/G+/H/OL) evolution of K10 with double-Gaussian (ILR+VBLR) consistent-line
 #   groups and independently-widthed inconsistent-line groups.
+
+# Version 10.3.1 (branch: optimizer_change)
+# - Fixed basin-hopping global optimization that was effectively disabled, leaving some
+#   parameters (e.g. emission-line traits) stuck at or near their initial values even
+#   with good initial guesses (e.g. 3C 120).  Two coupled causes in max_likelihood():
+#     (1) Temperature: the objective nll=-lnprob is the full-spectrum log-likelihood
+#         summed over all unmasked pixels, so its scale is ~N_pix (thousands).  With
+#         scipy's default basin-hopping T=1.0, the Metropolis acceptance exp(-dF/T) was
+#         ~0 for any uphill hop, so no worse minimum was ever accepted and the routine
+#         degenerated into greedy local descent from the initial guess.  T is now scaled
+#         to the objective: T = 0.5 * N_pix * accept_drchi2 (accept_drchi2 = tolerated
+#         worsening in reduced chi^2 per accepted hop, default 0.02).
+#     (2) Step size: the per-parameter ScaledStep rel_step remains at its original 0.001.
+#         A trial bump to 0.05 was reverted -- combined with the raised temperature it
+#         drove scipy's AdaptiveStepsize wrapper to grow the step until proposals fell
+#         outside the nonlinear soft-constraint region (lnprob=-inf), flooding the log
+#         with "inf" current-f values and letting the fit wander into worse basins.
+#         The temperature is therefore validated as a single variable FIRST (with the
+#         original step size); the 0.05 step is retained as a commented experiment.
+#   accept_drchi2 = 0.01 is the validated value (large drop in final function value while
+#   keeping the fit stable) and is the primary tuning dial.
+#   Old values are retained as comments for A/B testing.  The optimizer itself is
+#   unchanged (basin-hopping global + SLSQP local) and used across all fit stages.
 ##########################################################################################################
 
 
@@ -7478,11 +7501,44 @@ def max_likelihood(param_dict,
 
     # Named handle so the callback can report the (adaptively-updated) step size.
     # scipy mutates my_step.stepsize in place via its AdaptiveStepsize wrapper.
-    my_step = ScaledStep(bounds, rel_step=0.001) # after trial and error with Mrk 1392, this was the best number
+    #
+    # --- OPTIMIZER TUNING CHANGE (see block comment below) -----------------------------
+    # Step size reverted to the original 0.001 to isolate the temperature change (below)
+    # as a single-variable experiment.  The larger 0.05 step was too aggressive: combined
+    # with the raised temperature it drove scipy's AdaptiveStepsize wrapper to grow the
+    # step until proposals routinely fell OUTSIDE the nonlinear soft-constraint region,
+    # where lnprob = -inf (nll = +inf).  That produced the flood of "inf" current-f values
+    # and let the optimizer wander into worse basins.
+    my_step = ScaledStep(bounds, rel_step=0.001) # original hand-tuned value (Mrk 1392)
+    # EXPERIMENTAL (revisit once temperature is validated): my_step = ScaledStep(bounds, rel_step=0.05)
+
+    # --- Basin-hopping temperature scaling --------------------------------------------
+    # The objective nll = -lnprob is the full-spectrum negative log-likelihood summed
+    # over all unmasked pixels, so its scale is ~N_pix (thousands), NOT order-unity.
+    # Basin-hopping's Metropolis acceptance is exp(-dF/T); the parameter-independent
+    # -0.5*log(2*pi*noise^2) term cancels between hops, leaving dF = 0.5*d(chi^2).
+    # With scipy's DEFAULT T=1.0, any uphill hop has dF >> 1 -> acceptance ~ 0, so
+    # basin-hopping never accepts a worse minimum and degenerates into greedy local
+    # descent anchored on the initial guess (this is the "params stuck at init" bug).
+    #
+    # We instead scale T to the objective: to occasionally accept a hop that worsens the
+    # *reduced* chi^2 by ~accept_drchi2, we need T ~ 0.5 * N_pix * accept_drchi2.
+    # NOTE: accept_drchi2 is the primary tuning dial.  0.01 is validated (large drop in
+    # final function value vs. baseline while keeping the fit stable); too-permissive
+    # values (0.02-0.05) let the optimizer accept much-worse basins and wander away from a
+    # good solution, while 0.005 was too weak a lever.  Tune this before re-enabling the
+    # larger step size above.
+    n_pix         = len(galaxy[fit_mask])   # number of unmasked pixels actually fit
+    accept_drchi2 = 0.01                    # tolerated worsening in reduced chi^2 per accepted hop (validated)
+    basinhop_T    = 0.5 * n_pix * accept_drchi2
+    if verbose:
+        print("\n Basin-hopping temperature scaled to objective: T = %0.2f (N_pix = %d, accept_drchi2 = %0.3f)"
+              % (basinhop_T, n_pix, accept_drchi2))
 
     result = op.basinhopping(func = nll,
                              x0 = params,
                              # stepsize=1.0, # override with the take_step kwarg
+                             T = basinhop_T, # OLD: default T=1.0 disabled hopping; now scaled to N_pix (see comment above)
                              interval=50, # originally 1, but revert to scipy default
                              niter = 2500, # Max # of iterations before stopping
                              minimizer_kwargs = {'args':(
