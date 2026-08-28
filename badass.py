@@ -295,6 +295,106 @@ __status__	   = "Release"
 # - Added Kovacevic-Dojcinovic et al. (2025) optical FeII template ("K25"), a 7-group
 #   (F/S/G/P+/G+/H/OL) evolution of K10 with double-Gaussian (ILR+VBLR) consistent-line
 #   groups and independently-widthed inconsistent-line groups.
+
+# Version 10.3.1 (branch: optimizer_change)
+# - Fixed basin-hopping global optimization that was effectively disabled, leaving some
+#   parameters (e.g. emission-line traits) stuck at or near their initial values even
+#   with good initial guesses (e.g. 3C 120).  Two coupled causes in max_likelihood():
+#     (1) Temperature: the objective nll=-lnprob is the full-spectrum log-likelihood
+#         summed over all unmasked pixels, so its scale is ~N_pix (thousands).  With
+#         scipy's default basin-hopping T=1.0, the Metropolis acceptance exp(-dF/T) was
+#         ~0 for any uphill hop, so no worse minimum was ever accepted and the routine
+#         degenerated into greedy local descent from the initial guess.  T is now scaled
+#         to the objective: T = 0.5 * N_pix * accept_drchi2 (accept_drchi2 = tolerated
+#         worsening in reduced chi^2 per accepted hop, default 0.02).
+#     (2) Step size: the per-parameter ScaledStep rel_step remains at its original 0.001.
+#         A trial bump to 0.05 was reverted -- combined with the raised temperature it
+#         drove scipy's AdaptiveStepsize wrapper to grow the step until proposals fell
+#         outside the nonlinear soft-constraint region (lnprob=-inf), flooding the log
+#         with "inf" current-f values and letting the fit wander into worse basins.
+#         The temperature is therefore validated as a single variable FIRST (with the
+#         original step size); the 0.05 step is retained as a commented experiment.
+#   accept_drchi2 = 0.01 is the validated value (large drop in final function value while
+#   keeping the fit stable) and is the primary tuning dial.
+#   Old values are retained as comments for A/B testing.  The optimizer itself is
+#   unchanged (basin-hopping global + SLSQP local) and used across all fit stages.
+
+# Version 10.3.2 (branch: optimizer_change)
+# - Added an optional Differential Evolution optimizer backend for the max-likelihood
+#   fit, selectable via fit_options["optimizer"] = "basinhopping" (default, unchanged
+#   basin-hopping + SLSQP) or "de" (differential_evolution global + trust-constr polish).
+#   Motivation: the K25 Fe II shape parameters live in a degenerate/near-singular Jacobian
+#   subspace where gradient methods (SLSQP) stall; DE is derivative-free (population-based)
+#   and does not need a well-conditioned gradient, while still honoring the nonlinear soft
+#   constraints (converted from the SLSQP dict format to scipy NonlinearConstraint objects,
+#   reused by both DE and its trust-constr polish).  The good initial guess is seeded into
+#   the population via x0.  DE parallelism is exposed as fit_options["de_workers"]: 1 (default,
+#   single core -- use for batch multiprocessing where the outer pool owns parallelism), -1
+#   (all cores), or N>1 (N cores, e.g. a single-object stage-2 AGN-template fit leaving some
+#   cores free).  Added purely as an A/B option -- the basin-hopping path is untouched and
+#   remains the default.
+
+# Version 10.3.3 (branch: optimizer_change)
+# - Fixed-value (constant) line parameters are now first-class and can be TIED to.
+#   Previously, setting a line parameter to a numeric value (e.g. "disp":"250.0") removed
+#   it from the fit (good for dimensionality reduction) but the value did not register as a
+#   named parameter, so another line could NOT tie to it (e.g. "disp":"NA_OIII_5007_DISP"
+#   referencing a line whose disp is a constant) -- the tie referenced an undefined variable
+#   and errored.  Added get_line_constants(line_list), which returns {PARAM_NAME: value} for
+#   every numeric-constant line parameter, and injected it into the parameter dictionary
+#   wherever line expressions are evaluated: the model (fit_model -> line_constructor), the
+#   max-like and MCMC tied-parameter output (max_like_add_tied_parameters, add_tied_parameters
+#   -- the latter also guarded against a pure constant tie having no free variables), and the
+#   max-like / best-model plots.  Now you can fix a line's kinematics once and tie other lines
+#   to it.  NOTE: provide constants as STRINGS ("250.0"), not raw floats; the output loops do a
+#   substring test on the expression that assumes a string.  Line/config test plots are not yet
+#   covered (niche path).
+
+# Version 10.3.4 (branch: optimizer_change)
+# - Added a CMA-ES optimizer backend, selectable via fit_options["optimizer"] = "cma"
+#   (requires the `cma` package, pip/conda-installable; imported lazily only when selected).
+#   CMA-ES adapts a full covariance matrix to the objective's scaling/correlations, so it
+#   samples ill-scaled/correlated parameter spaces more efficiently (usually far fewer
+#   objective evaluations than DE for a given quality).  Soft (nonlinear inequality) constraints
+#   are handled by pycma's AUGMENTED LAGRANGIAN (cma.ConstrainedFitnessAL): per-constraint
+#   multipliers adapt each generation, giving a smooth gradient toward feasibility and handling
+#   ACTIVE constraints (optimum on a boundary) correctly -- unlike a death penalty, which gives
+#   no directional information and stalls at active boundaries.  The objective fed to AL is
+#   neg_lnprob with soft_cons REMOVED (bounds+priors+likelihood only), so AL owns the constraints
+#   without double-counting lnprior's own +inf; when no soft constraints are present it falls
+#   back to plain CMA-ES.  An SLSQP polish then refines against the true soft constraints (as in
+#   DE).  Per-parameter CMA_stds = 0.25 * plim range handle the very different parameter scales;
+#   de_maxiter caps the generations.  NOTE: AL carries adaptive multiplier state updated once per
+#   generation, so evaluation is SERIAL (a parallel AL -- pre-computing objectives into a cache --
+#   is a follow-up); the earlier death-penalty + de_workers pool was replaced by AL.  ("Hard
+#   constraints" -- ties/fixed line values -- are already baked into the model as non-free params,
+#   so AL only needs the soft nonlinear inequalities.)  Basin-hopping default is unchanged.
+
+# Version 10.3.5 (branch: optimizer_change)
+# - Added IPOP restarts to the CMA-ES backend, controlled by fit_options["cma_restarts"]
+#   (default 4; 0 disables).  When CMA-ES converges (its step size sigma collapses) it can be
+#   stuck in a LOCAL optimum; IPOP (Auger & Hansen 2005) restarts it with sigma/covariance reset
+#   and the population DOUBLED each restart, which re-explores and can escape to a better basin.
+#   Restarts are AUTOMATIC within a single max_likelihood call -- the user does not re-run
+#   anything; they just set cma_restarts.  A fresh Augmented-Lagrangian instance per restart
+#   resets the multipliers, each restart runs until CMA-ES converges or de_maxiter generations,
+#   and the best FEASIBLE solution across all restarts is kept (scored by the true objective:
+#   feasible -> finite likelihood, infeasible -> +inf, so a feasible restart always wins).  NOTE:
+#   later restarts have larger populations (2^k x base), so more evaluations -- lower cma_restarts
+#   if runtime is a concern.  Basin-hopping default is unchanged.
+
+# Version 10.3.6 (branch: optimizer_change)
+# - Parallelized the CMA-ES backend across fit_options["de_workers"] (same semantics as DE: 1 =
+#   single core, -1 = all cores, N>1 = N cores).  A multiprocessing pool evaluates the population's
+#   objective each generation, with the (soft_cons-stripped) cma_nll_args shipped to each worker
+#   ONCE via the pool initializer (module-level _cma_worker_init / _cma_objective helpers), so only
+#   the small candidate vectors are pickled per generation.  With the Augmented Lagrangian active,
+#   the multipliers are fixed within a generation, so the parallel objectives are pre-computed into
+#   a per-generation cache (keyed by the candidate bytes) and ConstrainedFitnessAL does its cheap
+#   constraint-combine from the cache -- a cache miss falls back to a serial recompute (still
+#   correct), and the multiplier update stays serial.  When no soft constraints are present the
+#   parallel objectives are the fitness directly.  Especially helps the larger IPOP restarts.
+#   de_workers=1 (batch) keeps it serial with no pool, avoiding nested multiprocessing.
 ##########################################################################################################
 
 
@@ -555,6 +655,10 @@ def run_single_thread(fits_file,
     mask_emline			= fit_options["mask_emline"]
     mask_metal			= fit_options["mask_metal"]
     fit_stat		  	= fit_options["fit_stat"]
+    optimizer           = fit_options["optimizer"] # "basinhopping" (basinhopping+SLSQP) or "de" (differential_evolution+trust-constr)
+    de_workers          = fit_options["de_workers"] # parallel workers for "de": 1 (single core), -1 (all), N>1 (N cores)
+    de_maxiter          = fit_options["de_maxiter"] # max generations for the "de" optimizer (also caps CMA generations/restart)
+    cma_restarts        = fit_options["cma_restarts"] # number of IPOP restarts for the "cma" optimizer
     n_basinhop	   		= fit_options["n_basinhop"]
     reweighting         = fit_options["reweighting"]
     test_lines			= fit_options["test_lines"]
@@ -930,7 +1034,7 @@ def run_single_thread(fits_file,
                                fit_stat=fit_stat,
                                output_model=False,
                                test_outflows=False,
-                               n_basinhop=n_basinhop,
+                               optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                reweighting=reweighting,
                                max_like_niter=max_like_niter,
                                verbose=verbose,
@@ -1031,7 +1135,7 @@ def run_single_thread(fits_file,
                                fit_stat=fit_stat,
                                output_model=False,
                                test_outflows=False,
-                               n_basinhop=n_basinhop,
+                               optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                reweighting=reweighting,
                                max_like_niter=max_like_niter,
                                verbose=verbose,
@@ -1158,7 +1262,7 @@ def run_single_thread(fits_file,
                                                 fit_stat=fit_stat,
                                                 output_model=False,
                                                 test_outflows=False,
-                                                n_basinhop=n_basinhop,
+                                                optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                                 reweighting=reweighting,
                                                 max_like_niter=max_like_niter,
                                                 force_best=force_best,
@@ -3603,7 +3707,7 @@ def initialize_pars(lam_gal,galaxy,noise,fit_reg,disp_res,fit_mask_good,velscale
 
             # K25 optical FeII template: VBLR (wing) component must be at least as broad
             # as the ILR (core) component
-            ("K25_OPT_FEII_VBLR_DISP","K25_OPT_FEII_ILR_DISP"),
+            #("K25_OPT_FEII_VBLR_DISP","K25_OPT_FEII_ILR_DISP"),
 
         ]
 
@@ -4761,6 +4865,10 @@ def check_hard_cons(lam_gal,galaxy,noise,comp_options,narrow_options,broad_optio
     # param_dict = {par:0 for par in line_par_input}
     new_line_list = copy.deepcopy(line_list)
     param_dict = {par:0 for par in {**par_input,**line_par_input}}
+    # Numeric-constant line params are not free parameters, so include them here too; without
+    # this, a line that ties to a constant (e.g. "disp":"NA_OIII_5007_DISP" where 5007's disp
+    # is a constant) fails to parse and gets silently converted to a free parameter.
+    param_dict.update(get_line_constants(line_list))
     for line in list(line_list):
         for hpar in line_list[line]:
             if (line_list[line][hpar]!="free") and (hpar in ["amp","disp","voff","h3","h4","h5","h6","h7","h8","h9","h10","shape"]):
@@ -4982,6 +5090,10 @@ def line_test(param_dict,
               fit_stat="ML",
               output_model=False,
               test_outflows=False,
+              optimizer="basinhopping",
+              de_workers=1,
+              de_maxiter=1000,
+              cma_restarts=4,
               n_basinhop=25,
               reweighting=True,
               max_like_niter=10,
@@ -5134,7 +5246,7 @@ def line_test(param_dict,
                                                        fit_stat=fit_stat,
                                                        output_model=False,
                                                        test_outflows=True,
-                                                       n_basinhop=n_basinhop,
+                                                       optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                                        reweighting=reweighting,
                                                        max_like_niter=0,
                                                        full_verbose=test_options["full_verbose"],
@@ -5302,7 +5414,7 @@ def line_test(param_dict,
                                                        fit_stat=fit_stat,
                                                        output_model=False,
                                                        test_outflows=True,
-                                                       n_basinhop=n_basinhop,
+                                                       optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                                        reweighting=reweighting,
                                                        max_like_niter=0,
                                                        force_best=test_options["force_best"],
@@ -5661,6 +5773,10 @@ def config_test(param_dict,
               fit_stat="ML",
               output_model=False,
               test_outflows=False,
+              optimizer="basinhopping",
+              de_workers=1,
+              de_maxiter=1000,
+              cma_restarts=4,
               n_basinhop=25,
               reweighting=True,
               max_like_niter=10,
@@ -5792,7 +5908,7 @@ def config_test(param_dict,
                                                    fit_stat=fit_stat,
                                                    output_model=False,
                                                    test_outflows=True,
-                                                   n_basinhop=n_basinhop,
+                                                   optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                                    reweighting=reweighting,
                                                    max_like_niter=0,
                                                    full_verbose=test_options["full_verbose"],
@@ -5940,7 +6056,7 @@ def config_test(param_dict,
                                                    fit_stat=fit_stat,
                                                    output_model=False,
                                                    test_outflows=True,
-                                                   n_basinhop=n_basinhop,
+                                                   optimizer=optimizer, de_workers=de_workers, de_maxiter=de_maxiter, cma_restarts=cma_restarts, n_basinhop=n_basinhop,
                                                    reweighting=reweighting,
                                                    max_like_niter=0,
                                                    force_best=test_options["force_best"],
@@ -7274,6 +7390,37 @@ def calc_max_like_fit_quality(param_dict,noise,n_free_pars,line_list,combined_li
 
 #### Maximum Likelihood Fitting ##################################################
 
+def neg_lnprob(*args):
+    """
+    Module-level negative log-probability (= -lnprob), the objective minimized by the
+    optimizers.  It MUST live at module scope (not as a local lambda inside
+    max_likelihood) so it is picklable: scipy.optimize.differential_evolution with
+    workers != 1 ships the objective to worker processes via pickle, and a local lambda
+    raises "Can't pickle local object 'max_likelihood.<locals>.<lambda>'".
+    lnprob is resolved at call time, so its definition further down the module is fine.
+    """
+    return -lnprob(*args)
+
+# --- CMA-ES parallel objective helpers -------------------------------------------------
+# CMA-ES evaluates a population each generation; we parallelize the (expensive) objective over
+# de_workers.  The soft_cons-stripped nll_args is large, so a pool initializer ships it to each
+# worker process ONCE (stored in this module global) and per generation only the small candidate
+# vectors are pickled.  The same global is set in the main process, so _cma_objective also serves
+# the serial path and the Augmented-Lagrangian cache.
+_CMA_NLL_ARGS = None
+
+def _cma_worker_init(cma_nll_args):
+    """Pool initializer (and main-process setter): store the objective's args for _cma_objective."""
+    global _CMA_NLL_ARGS
+    _CMA_NLL_ARGS = cma_nll_args
+
+def _cma_objective(x):
+    """CMA-ES objective for one candidate: neg_lnprob with soft_cons removed (bounds/priors/
+    likelihood only -- AL owns the soft constraints).  Non-finite (numerical blow-up) -> large
+    finite fallback so it doesn't poison CMA-ES's rank-based update."""
+    f = neg_lnprob(np.asarray(x, dtype=float), *_CMA_NLL_ARGS)
+    return f if np.isfinite(f) else 1e15
+
 # add a class at the module level, suggested by claude
 # this is to add a parameter-dependent step size in basinhopping,
 # which then leads to better sampling of the parameter space
@@ -7331,6 +7478,10 @@ def max_likelihood(param_dict,
                    fit_stat="ML",
                    output_model=False,
                    test_outflows=False,
+                   optimizer="basinhopping",
+                   de_workers=1,
+                   de_maxiter=1000,
+                   cma_restarts=4,
                    n_basinhop=25,
                    reweighting=True,
                    max_like_niter=10,
@@ -7365,12 +7516,29 @@ def max_likelihood(param_dict,
     # Perform maximum likelihood estimation for initial guesses of MCMC fit
     if verbose:
         print('\n Performing max. likelihood fitting.')
-        print('\n Using Basin-hopping algorithm to estimate parameters. niter_success = %d' % (n_basinhop))
+        if optimizer == "basinhopping":
+            print('\n Using Basin-hopping algorithm to estimate parameters. niter_success = %d' % (n_basinhop))
+        elif optimizer == "de":
+            print('\n Using Differential Evolution (global) + trust-constr (polish) to estimate parameters.')
+        elif optimizer == "cma":
+            print('\n Using CMA-ES (global) + SLSQP (polish) to estimate parameters.')
     # Start a timer
     start_time = time.time()
     # Negative log-likelihood (to minimize the negative maximum)
     # nll = lambda *args: -lnlike(*args)
     nll = lambda *args: -lnprob(*args)
+
+    # Argument tuple passed to nll/lnprob, shared by both optimizer backends
+    # (basin-hopping's minimizer_kwargs and differential_evolution's `args`).
+    nll_args = (
+                param_names, prior_dict, line_list, combined_line_list, bounds, soft_cons,
+                lam_gal, galaxy, noise, comp_options, losvd_options, host_options,
+                agn_temp_options, power_options, poly_options, opt_feii_options,
+                uv_iron_options, balmer_options, outflow_test_options, host_template,
+                agn_template, opt_feii_templates, uv_iron_template, balmer_template,
+                stel_templates, blob_pars, disp_res, fit_mask, velscale, fit_type,
+                fit_stat, output_model, run_dir,
+               )
 
     # Perform global optimization using basin-hopping algorithm (superior to minimize(), but slower)
     # We will use minimize() for the monte carlo bootstrap iterations.
@@ -7478,49 +7646,141 @@ def max_likelihood(param_dict,
 
     # Named handle so the callback can report the (adaptively-updated) step size.
     # scipy mutates my_step.stepsize in place via its AdaptiveStepsize wrapper.
-    my_step = ScaledStep(bounds, rel_step=0.001) # after trial and error with Mrk 1392, this was the best number
+    #
+    # --- OPTIMIZER TUNING CHANGE (see block comment below) -----------------------------
+    # Step size reverted to the original 0.001 to isolate the temperature change (below)
+    # as a single-variable experiment.  The larger 0.05 step was too aggressive: combined
+    # with the raised temperature it drove scipy's AdaptiveStepsize wrapper to grow the
+    # step until proposals routinely fell OUTSIDE the nonlinear soft-constraint region,
+    # where lnprob = -inf (nll = +inf).  That produced the flood of "inf" current-f values
+    # and let the optimizer wander into worse basins.
+    my_step = ScaledStep(bounds, rel_step=0.001) # original hand-tuned value (Mrk 1392)
+    # EXPERIMENTAL (revisit once temperature is validated): my_step = ScaledStep(bounds, rel_step=0.05)
 
-    result = op.basinhopping(func = nll,
+    # --- Basin-hopping temperature scaling --------------------------------------------
+    # The objective nll = -lnprob is the full-spectrum negative log-likelihood summed
+    # over all unmasked pixels, so its scale is ~N_pix (thousands), NOT order-unity.
+    # Basin-hopping's Metropolis acceptance is exp(-dF/T); the parameter-independent
+    # -0.5*log(2*pi*noise^2) term cancels between hops, leaving dF = 0.5*d(chi^2).
+    # With scipy's DEFAULT T=1.0, any uphill hop has dF >> 1 -> acceptance ~ 0, so
+    # basin-hopping never accepts a worse minimum and degenerates into greedy local
+    # descent anchored on the initial guess (this is the "params stuck at init" bug).
+    #
+    # We instead scale T to the objective: to occasionally accept a hop that worsens the
+    # *reduced* chi^2 by ~accept_drchi2, we need T ~ 0.5 * N_pix * accept_drchi2.
+    # NOTE: accept_drchi2 is the primary tuning dial.  0.01 is validated (large drop in
+    # final function value vs. baseline while keeping the fit stable); too-permissive
+    # values (0.02-0.05) let the optimizer accept much-worse basins and wander away from a
+    # good solution, while 0.005 was too weak a lever.  Tune this before re-enabling the
+    # larger step size above.
+    n_pix         = len(galaxy[fit_mask])   # number of unmasked pixels actually fit
+    accept_drchi2 = 0.01                    # tolerated worsening in reduced chi^2 per accepted hop (validated)
+    basinhop_T    = 0.5 * n_pix * accept_drchi2
+    if verbose and optimizer == "basinhopping":
+        print("\n Basin-hopping temperature scaled to objective: T = %0.2f (N_pix = %d, accept_drchi2 = %0.3f)"
+              % (basinhop_T, n_pix, accept_drchi2))
+
+    if optimizer == "de":
+        # ---- Differential Evolution (global) + trust-constr (polish) -----------------
+        # Derivative-free population search: handles the degenerate/near-singular Fe II
+        # shape subspace that stalls gradient methods (SLSQP), while trust-constr polish
+        # respects bounds + nonlinear soft constraints.  DE and trust-constr BOTH require
+        # constraints as NonlinearConstraint objects, not the SLSQP {"type":"ineq",...}
+        # dict format.  Each soft constraint is (lhs - rhs) >= 0  ->  bounds (0, inf).
+        nlc = [op.NonlinearConstraint(lambda_gen(copy.deepcopy(con)), 0.0, np.inf)
+               for con in soft_cons]
+
+        # de_workers comes from fit_options["de_workers"]: 1 = single core (use for batch
+        # multiprocessing, where the outer pool owns parallelism), -1 = all cores, N>1 = N
+        # cores (single-object stage-2 AGN-template fit, leaving some cores free).  scipy
+        # requires updating="deferred" whenever workers != 1.
+        de_updating = "immediate" if de_workers == 1 else "deferred"
+
+        # Progress readout mirroring the basin-hopping output: one line per generation with
+        # the best objective so far (so you can watch it decrease) and DE's population
+        # convergence metric.  scipy passes `convergence` = tol / (population spread); it
+        # rises toward 1 as the population collapses onto a solution (DE halts when >1).
+        # We use DE's native callback(xk, convergence) signature; best f is recomputed from
+        # the best member xk (one extra evaluation per generation -- negligible vs a full
+        # popsize*Nparam generation, and version-robust across scipy releases).
+        de_gen = [0] # mutable generation counter (closure-friendly)
+        def de_callback(xk, convergence):
+            de_gen[0] += 1
+            best_f = neg_lnprob(xk, *nll_args)
+            print(" DE | gen %5d | best f = %14.4f | convergence = %8.4f"
+                  % (de_gen[0], best_f, convergence))
+            return False # never request early termination; DE stops on its own tol/maxiter
+
+        # Seed the ENTIRE initial population in a compact ball around the good initial guess
+        # (params), instead of scipy's default spread across the full bounds.  DE mutates
+        # with difference vectors ~ the population spread; with full-bounds init those
+        # differences are ~the full parameter ranges, so every trial from the good guess
+        # overshoots into bad/infeasible space and the best f never improves (the observed
+        # "frozen best f" stall, since DE -- unlike basin-hopping+SLSQP -- does no local
+        # descent per candidate).  A tight cluster keeps the difference vectors small so DE
+        # can actually refine the guess (incl. the degenerate FeII directions).
+        # de_init_frac = cluster width as a fraction of each parameter's plim range; raise
+        # for more exploration, lower to refine tighter.
+        de_popsize   = 15
+        de_init_frac = 0.05 # this may have to be adjusted
+        _lb, _ub = np.asarray(lb, dtype=float), np.asarray(ub, dtype=float)
+        _span    = _ub - _lb
+        _npop    = de_popsize * len(params)
+        _rng     = np.random.default_rng()
+        de_init  = np.asarray(params, dtype=float)[None, :] + \
+                   _rng.normal(0.0, de_init_frac * _span, size=(_npop, len(params)))
+        de_init[0] = np.asarray(params, dtype=float)   # keep the exact guess as one member
+        de_init = np.clip(de_init, _lb, _ub)
+
+        result = op.differential_evolution(
+                     func          = neg_lnprob,           # module-level (picklable) objective; required for workers != 1
+                     bounds        = bounds,               # already a list of (lo,hi) plim tuples
+                     args          = nll_args,
+                     init          = de_init,              # compact population around the seed (see above); overrides popsize
+                     constraints   = nlc if len(nlc) > 0 else (),
+                     strategy      = "best1bin",
+                     maxiter       = de_maxiter,   # fit_options["de_maxiter"] (default 1000)
+                     tol           = 1e-6,
+                     mutation      = (0.5, 1.0),
+                     recombination = 0.7,
+                     polish        = False,                # DE's own polish is trust-constr (see below); we polish with SLSQP instead
+                     workers       = de_workers,
+                     updating      = de_updating,
+                     callback      = de_callback if verbose else None,
+                     disp          = False,               # our callback supersedes scipy's per-step print
+                     )
+
+        # Final local polish with SLSQP.  DE's built-in polish=True uses trust-constr (when
+        # constrained), whose finite-difference gradient probes points that can cross an
+        # active soft-constraint boundary, where the objective returns +inf (lnprob=-inf);
+        # that inf propagates into trust-constr's trust-region linear algebra and crashes it
+        # ("array must not contain infs or NaNs").  SLSQP is the proven BADASS local
+        # optimizer on this exact objective (basin-hopping ran it heavily without issue) and
+        # reuses the dict-format soft constraints.  Wrapped so a failed/worse polish falls
+        # back to the (already best-ever) DE result.
+        if verbose:
+            print("\n Polishing DE solution with SLSQP.")
+        try:
+            polished = op.minimize(fun=neg_lnprob, x0=result.x, args=nll_args,
+                                   method="SLSQP", bounds=param_bounds, constraints=cons,
+                                   options={"disp": False})
+            if np.isfinite(polished.fun) and (polished.fun <= result.fun):
+                result = polished
+            elif verbose:
+                print(" SLSQP polish did not improve the DE result; keeping DE solution.")
+        except Exception as e:
+            if verbose:
+                print(" SLSQP polish failed (%s); keeping unpolished DE result." % e)
+
+    elif optimizer == "basinhopping":
+        result = op.basinhopping(func = nll,
                              x0 = params,
                              # stepsize=1.0, # override with the take_step kwarg
+                             T = basinhop_T, # OLD: default T=1.0 disabled hopping; now scaled to N_pix (see comment above)
                              interval=50, # originally 1, but revert to scipy default
                              niter = 2500, # Max # of iterations before stopping
-                             minimizer_kwargs = {'args':(
-                                                         param_names,
-                                                         prior_dict,
-                                                         line_list,
-                                                         combined_line_list,
-                                                         bounds,
-                                                         soft_cons,
-                                                         lam_gal,
-                                                         galaxy,
-                                                         noise,
-                                                         comp_options,
-                                                         losvd_options,
-                                                         host_options,
-                                                         agn_temp_options,
-                                                         power_options,
-                                                         poly_options,
-                                                         opt_feii_options,
-                                                         uv_iron_options,
-                                                         balmer_options,
-                                                         outflow_test_options,
-                                                         host_template,
-                                                         agn_template,
-                                                         opt_feii_templates,
-                                                         uv_iron_template,
-                                                         balmer_template,
-                                                         stel_templates,
-                                                         blob_pars,
-                                                         disp_res,
-                                                         fit_mask,
-                                                         velscale,
-                                                         fit_type,
-                                                         fit_stat,
-                                                         output_model,
-                                                         run_dir
-                                                        ),
-                              'method':'SLSQP', 'bounds':param_bounds, 'constraints':cons, 
+                             minimizer_kwargs = {'args': nll_args,
+                              'method':'SLSQP', 'bounds':param_bounds, 'constraints':cons,
                               # "method":"Nelder-Mead","bounds":param_bounds,
                               "options":{"disp":False,}},# "adaptive":True, }},
                                disp=verbose,
@@ -7528,7 +7788,144 @@ def max_likelihood(param_dict,
                                take_step=my_step, # the ScaledStep instance created above
                                callback=callback_ftn,
                                )
-    
+
+    elif optimizer == "cma":
+        # ---- CMA-ES (global, Augmented-Lagrangian constraints) + SLSQP (polish) ----------
+        # CMA-ES: derivative-free, adapts a full covariance matrix to the landscape's
+        # scaling/correlations -> sample-efficient global search.  Soft (nonlinear inequality)
+        # constraints are handled by pycma's AUGMENTED LAGRANGIAN (ConstrainedFitnessAL):
+        # unlike a death penalty, it augments the objective with per-constraint multipliers
+        # that ADAPT each generation, giving a smooth gradient toward feasibility and handling
+        # ACTIVE constraints (optimum on a boundary) correctly.  (BADASS "hard constraints" --
+        # ties/fixed values -- are already baked into the model as non-free params, so only the
+        # soft_cons nonlinear inequalities need AL here.)
+        #
+        # The AL merit must be finite, and AL OWNS the soft constraints, so the objective is
+        # neg_lnprob with soft_cons REMOVED (bounds + priors + likelihood only) -- avoiding a double
+        # count with lnprior's own soft-constraint +inf.  Per-parameter CMA_stds handle the
+        # heterogeneous scales; de_maxiter caps the generations PER restart; cma_restarts sets the
+        # number of IPOP restarts (see the restart loop below).  The population objective is
+        # evaluated in PARALLEL across de_workers (cma_nll_args shipped to workers once via the pool
+        # initializer).  With AL active the multipliers are fixed within a generation, so we
+        # pre-compute the population's objectives in parallel into a cache and let
+        # ConstrainedFitnessAL do its cheap constraint-combine from the cache (a cache miss falls
+        # back to a serial recompute); the multiplier update stays serial in the main process.  The
+        # SLSQP polish then refines against the TRUE soft constraints, as in DE.
+        import cma  # lazy import: only required when this backend is selected
+
+        _lb, _ub = np.asarray(lb, dtype=float), np.asarray(ub, dtype=float)
+        _span    = _ub - _lb
+        cma_sigma0_frac = 0.25   # initial per-parameter step as a fraction of each plim range
+
+        # Objective args: soft_cons removed (element 5 of nll_args) so AL owns the constraints.
+        cma_nll_args = nll_args[:5] + ([],) + nll_args[6:]
+
+        # Soft constraints in pycma form: g(x) <= 0 when feasible.  lambda_gen(con) computes
+        # (expr1 - expr2), which is >= 0 when feasible, so we negate it.
+        _con_funs = [lambda_gen(copy.deepcopy(con)) for con in soft_cons]
+        def cma_constraints(x):
+            xx = np.asarray(x, dtype=float)
+            return [float(-cf(xx)) for cf in _con_funs]
+
+        use_al  = len(soft_cons) > 0                      # no soft constraints -> plain CMA-ES
+        _flabel = "AL merit" if use_al else "best f"      # printed value is the AL merit when AL is active
+
+        # Parallel objective evaluation across de_workers (ship cma_nll_args to workers once).
+        _cma_worker_init(cma_nll_args)                    # also set the module global in the MAIN process
+        cma_pool = None
+        if de_workers != 1:
+            cma_pool = mp.Pool(processes=(None if de_workers == -1 else de_workers),
+                               initializer=_cma_worker_init, initargs=(cma_nll_args,))
+
+        def eval_objectives(X):
+            if cma_pool is None:
+                return [_cma_objective(xi) for xi in X]
+            return cma_pool.map(_cma_objective, X)
+
+        # Cache-backed objective for ConstrainedFitnessAL: returns the per-generation objectives
+        # pre-computed (in parallel) below; a cache miss recomputes serially (still correct).
+        _obj_cache = {}
+        def cma_al_objective(x):
+            v = _obj_cache.get(np.asarray(x, dtype=float).tobytes())
+            return v if v is not None else _cma_objective(np.asarray(x, dtype=float))
+
+        try:
+            # IPOP restarts: when CMA-ES converges (sigma collapses) it may sit in a LOCAL optimum.
+            # We restart it up to cma_restarts times, DOUBLING the population each restart (IPOP;
+            # Auger & Hansen 2005) with sigma/covariance reset, which re-explores and can escape to a
+            # better basin.  Restarts are automatic within this call; the best FEASIBLE solution
+            # across all restarts is kept.  Each restart runs until CMA-ES converges or de_maxiter
+            # generations.  (A fresh AL instance per restart resets the multipliers.)
+            n_params     = len(params)
+            base_popsize = 4 + int(3 * np.log(n_params))  # CMA-ES default population size
+            best_x       = np.asarray(params, dtype=float)
+            best_f       = float(neg_lnprob(best_x, *nll_args))  # feasible seed -> finite (+inf if infeasible)
+            total_gen    = 0
+            total_nfev   = 0
+            for restart in range(cma_restarts + 1):
+                popsize_r = base_popsize * (2 ** restart) # IPOP: double the population each restart
+                if use_al:
+                    cma_fitness_al = cma.ConstrainedFitnessAL(cma_al_objective, cma_constraints)  # fresh multipliers
+                es = cma.CMAEvolutionStrategy(
+                         list(params), 1.0,
+                         {"bounds"  : [list(_lb), list(_ub)],
+                          "CMA_stds": list(cma_sigma0_frac * _span),
+                          "maxiter" : de_maxiter,
+                          "popsize" : popsize_r,
+                          "verbose" : -9,   # silence cma's own console output; we print our own line
+                         })
+                while not es.stop():
+                    X    = es.ask()
+                    objs = eval_objectives(X)             # parallel objective evaluation (de_workers)
+                    if use_al:
+                        _obj_cache.clear()
+                        for xi, oi in zip(X, objs):
+                            _obj_cache[np.asarray(xi, dtype=float).tobytes()] = oi
+                        es.tell(X, [cma_fitness_al(xi) for xi in X])  # cfun -> cached objective + constraints
+                        cma_fitness_al.update(es)         # adapt AL multipliers/penalty each generation
+                    else:
+                        es.tell(X, objs)                  # objectives ARE the fitness (no constraints)
+                    total_gen += 1
+                    if verbose:
+                        print(" CMA | restart %d (pop %d) | gen %5d | %s = %14.4f | sigma = %10.4g"
+                              % (restart, popsize_r, total_gen, _flabel, es.result.fbest, es.sigma))
+                total_nfev += int(es.result.evaluations)
+                # Keep the best across restarts, scored by the TRUE objective (feasible -> finite
+                # likelihood, infeasible -> +inf), so a feasible restart always beats an infeasible one.
+                xr = es.result.xbest
+                if xr is not None:
+                    xr = np.asarray(xr, dtype=float)
+                    fr = float(neg_lnprob(xr, *nll_args))
+                    if fr < best_f:
+                        best_f, best_x = fr, xr
+                    if verbose and cma_restarts > 0:
+                        print("   -> restart %d best (true f) = %14.4f | overall best = %14.4f" % (restart, fr, best_f))
+        finally:
+            if cma_pool is not None:
+                cma_pool.close()
+                cma_pool.join()
+
+        # Report the overall-best (finite for feasible; fall back to the finite likelihood if the
+        # incumbent is somehow infeasible -- the SLSQP polish then restores feasibility).
+        result = op.OptimizeResult(x=best_x,
+                                   fun=(best_f if np.isfinite(best_f) else float(_cma_objective(best_x))),
+                                   success=True, nit=total_gen, nfev=total_nfev)
+
+        # Final SLSQP polish against the TRUE soft constraints (cons), as in the DE branch.
+        if verbose:
+            print("\n Polishing CMA-ES solution with SLSQP.")
+        try:
+            polished = op.minimize(fun=neg_lnprob, x0=result.x, args=nll_args,
+                                   method="SLSQP", bounds=param_bounds, constraints=cons,
+                                   options={"disp": False})
+            if np.isfinite(polished.fun) and (polished.fun <= result.fun):
+                result = polished
+            elif verbose:
+                print(" SLSQP polish did not improve the CMA-ES result; keeping CMA-ES solution.")
+        except Exception as e:
+            if verbose:
+                print(" SLSQP polish failed (%s); keeping unpolished CMA-ES result." % e)
+
     # Get elapsed time
     elap_time = (time.time() - start_time)
 
@@ -8141,6 +8538,9 @@ def max_like_add_tied_parameters(pdict,line_list):
     med_dict  = {key:pdict[key]["med"]  for key in pdict}
     std_dict  = {key:pdict[key]["std"]  for key in pdict}
     flag_dict = {key:pdict[key]["flag"] for key in pdict}
+    # Make numeric-constant line params referenceable so tied lines can point at them.
+    # (std/flag come from the free vars in the expression only, so constants contribute 0.)
+    med_dict.update(get_line_constants(line_list))
     # print()
 
     for line in line_list:
@@ -8165,6 +8565,26 @@ def isFloat(num):
     except (ValueError,TypeError) as e:
         return False
 
+def get_line_constants(line_list):
+    """
+    Return {PARAM_NAME: float} for every line parameter that is set to a numeric
+    constant, e.g. a line with "disp":"250.0" (or 250.0) yields {"<LINE>_DISP": 250.0}.
+
+    Constants are NOT free parameters, so they are absent from param_names / the model's
+    parameter dictionary.  Injecting these into the local_dict used by ne.evaluate makes
+    fixed values first-class: a line can resolve its own constant, AND other lines can
+    TIE to a constant by name (e.g. "disp":"NA_OIII_5007_DISP" where NA_OIII_5007's disp
+    is a fixed constant).  Without this, such a tie references an undefined variable.
+    """
+    _fit_pars = ["amp","disp","voff","shape","h3","h4","h5","h6","h7","h8","h9","h10"]
+    consts = {}
+    for line in line_list:
+        for par in line_list[line]:
+            val = line_list[line][par]
+            if (par in _fit_pars) and (val != "free") and isFloat(val):
+                consts[line+"_"+par.upper()] = float(val)
+    return consts
+
 def add_tied_parameters(pdict,line_list):
 
     # for key in pdict:
@@ -8188,6 +8608,18 @@ def add_tied_parameters(pdict,line_list):
 
     flat_samp_dict   = {key:pdict[key]["flat_chain"] for key in pdict}
     flag_dict	   = {key:pdict[key]["flag"] for key in pdict}
+
+    # Make numeric-constant line params referenceable so tied lines can point at them.
+    # Constants have no chain, so we broadcast them to constant arrays matching the free
+    # chains' length (and a scalar par_best); their uncertainty contribution is zero.
+    _line_consts = get_line_constants(line_list)
+    if len(_line_consts) > 0:
+        _clen = len(next(iter(chain_dict.values())))     if len(chain_dict)     else 0
+        _flen = len(next(iter(flat_samp_dict.values())))  if len(flat_samp_dict) else 0
+        for _cname, _cval in _line_consts.items():
+            chain_dict[_cname]     = np.full(_clen, _cval)
+            flat_samp_dict[_cname] = np.full(_flen, _cval)
+            par_best_dict[_cname]  = _cval
     # print()
 
     for line in line_list:
@@ -8195,13 +8627,19 @@ def add_tied_parameters(pdict,line_list):
             if (line_list[line][par]!="free") & (par in ["amp","disp","voff","shape","h3","h4","h5","h6","h7","h8","h9","h10"]) & (isFloat(line_list[line][par]) is False):
                 expr = line_list[line][par] # expression to evaluate
                 expr_vars  = [i for i in param_names if i in expr]
-                init	   = pdict[expr_vars[0]]["init"]
-                plim	   = pdict[expr_vars[0]]["plim"]
                 chain	   = ne.evaluate(line_list[line][par],local_dict = chain_dict)
                 par_best   = ne.evaluate(line_list[line][par],local_dict = par_best_dict).item()
                 flat_chain = ne.evaluate(line_list[line][par],local_dict = flat_samp_dict)
+                # A pure tie-to-constant has no free vars in the expression; take init/plim
+                # from the (constant) value itself instead of a referenced free parameter.
+                if len(expr_vars) > 0:
+                    init   = pdict[expr_vars[0]]["init"]
+                    plim   = pdict[expr_vars[0]]["plim"]
+                else:
+                    init   = par_best
+                    plim   = (par_best, par_best)
 
-                
+
                 ci_68_low  = np.sqrt(np.sum(np.array([ci_68_low_dict[i] for i in expr_vars],dtype=float)**2))
                 ci_68_upp  = np.sqrt(np.sum(np.array([ci_68_upp_dict[i] for i in expr_vars],dtype=float)**2))
                 ci_95_low  = np.sqrt(np.sum(np.array([ci_95_low_dict[i] for i in expr_vars],dtype=float)**2))
@@ -8255,6 +8693,7 @@ def max_like_plot(lam_gal,comp_dict,line_list,params,param_names,fit_mask,fit_no
 
         # Put params in dictionary
         p = dict(zip(param_names,params))
+        p.update(get_line_constants(line_list)) # let line-label voff annotations resolve tied-to-constant lines
 
         # Rescale all components by fit_norm
         for key in comp_dict:
@@ -9163,6 +9602,9 @@ def fit_model(params,
     keys = param_names
     values = params
     p = dict(zip(keys, values))
+    # Make fixed (numeric-constant) line parameters referenceable by name, so a line can
+    # resolve its own constant and other lines can tie to it (see get_line_constants).
+    p.update(get_line_constants(line_list))
     c = 299792.458 # speed of light
     host_model = np.copy(galaxy)
     # Initialize empty dict to store model components
@@ -12993,6 +13435,7 @@ def plot_best_model(param_dict,
 
     # Put params in dictionary
     p = dict(zip(param_names,par_best))
+    p.update(get_line_constants(line_list)) # let line-label voff annotations resolve tied-to-constant lines
 
     # Maximum Likelihood plot
     fig = plt.figure(figsize=(14,6)) 

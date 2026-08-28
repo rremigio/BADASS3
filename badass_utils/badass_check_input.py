@@ -66,6 +66,10 @@ def check_fit_options(input,comp_options,verbose=False):
 				"mask_emline" : False, # automatically mask lines for continuum fitting.
 				"mask_metal": False, # interpolate over metal absorption lines for high-z spectra
 				"fit_stat": "ML", # fit statistic; ML = Max. Like. , OLS = Ordinary Least Squares
+				"optimizer": "basinhopping", # global optimizer for max-like fit: "basinhopping" (basinhopping+SLSQP) or "de" (differential_evolution+trust-constr)
+				"de_workers": 1, # parallel workers for the "de" optimizer: 1 = single core (use for batch multiprocessing); -1 = all cores; N>1 = N cores (leave some free)
+				"de_maxiter": 1000, # maximum number of generations (iterations) for the "de" optimizer (also caps CMA-ES generations per restart)
+				"cma_restarts": 4, # number of IPOP restarts for the "cma" optimizer (0 = no restarts; each restart doubles the population to escape local optima)
 				"n_basinhop": 10, # Number of consecutive basinhopping thresholds before solution achieved
 				"reweighting":True, # re-weight the noise after initial fit to achieve RCHI2 = 1
 				"test_lines": False, # only test for outflows; "fit_outflows" must be set to True!
@@ -123,6 +127,38 @@ def check_fit_options(input,comp_options,verbose=False):
 							   ],
 					 "default" : "ML",
 					 "error_message" : "\n Fit statistic can be either ML (Maximum Likelihood) or OLS (Ordinary Least Squares).\n",
+					},
+	"optimizer" : {
+					 "conds" : [
+								lambda x: isinstance(x,(str)),
+								lambda x: x in ["basinhopping","de","cma"]
+							   ],
+					 "default" : "basinhopping",
+					 "error_message" : "\n Global optimizer (optimizer) must be 'basinhopping' (basin-hopping + SLSQP), 'de' (differential evolution + trust-constr), or 'cma' (CMA-ES + SLSQP).\n",
+					},
+	"de_workers" : {
+					 "conds" : [
+								lambda x: isinstance(x,(int)) and not isinstance(x,bool),
+								lambda x: (x==-1 or x>=1)
+							   ],
+					 "default" : 1,
+					 "error_message" : "\n Parallel workers for the 'de' optimizer (de_workers) must be an integer: 1 (single core), -1 (all cores), or N>1 (N cores).\n",
+					},
+	"de_maxiter" : {
+					 "conds" : [
+								lambda x: isinstance(x,(int)) and not isinstance(x,bool),
+								lambda x: (x>=1)
+							   ],
+					 "default" : 1000,
+					 "error_message" : "\n Maximum number of generations for the 'de' optimizer (de_maxiter) must be an integer >= 1.\n",
+					},
+	"cma_restarts" : {
+					 "conds" : [
+								lambda x: isinstance(x,(int)) and not isinstance(x,bool),
+								lambda x: (x>=0)
+							   ],
+					 "default" : 4,
+					 "error_message" : "\n Number of IPOP restarts for the 'cma' optimizer (cma_restarts) must be an integer >= 0.\n",
 					},
 	"n_basinhop" : {
 					 "conds" : [
